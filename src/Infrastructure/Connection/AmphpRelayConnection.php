@@ -53,6 +53,8 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     private array $pendingResponses = [];
     private array $connectionGenerations = [];
     private array $subscriptionHandlers = [];
+    private array $authRetryQueue = [];
+    private array $pendingEvents = [];
 
     public function __construct(
         private readonly ConnectionFactory $connectionFactory,
@@ -69,6 +71,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
     {
         $websocket = $this->getWebsocket($relayUrl);
+
+        $urlString = (string) $relayUrl;
+        $authResponseKey = $urlString.':auth-event:'.$signedAuthEvent->getId()->toHex();
+        $this->pendingResponses[$authResponseKey] = new DeferredFuture();
+
         $message = new ClientAuthMessage($signedAuthEvent);
         $websocket->sendText($message->toJson());
     }
@@ -124,6 +131,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
 
             $this->clearHandlersForRelay($urlString);
+            $this->clearPendingForRelay($urlString);
 
             $connection->updateState(ConnectionState::DISCONNECTED);
             unset($this->connections[$urlString]);
@@ -188,11 +196,17 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function publishEvent(RelayUrl $relayUrl, Event $event): bool
     {
         $websocket = $this->getWebsocket($relayUrl);
+        $eventKey = (string) $relayUrl.':'.$event->getId()->toHex();
+        $this->pendingEvents[$eventKey] = $event;
 
         $message = new EventMessage($event);
         $websocket->sendText($message->toJson());
 
-        return $this->waitForOkResponse($relayUrl, $event->getId())->await();
+        try {
+            return $this->waitForOkResponse($relayUrl, $event->getId())->await();
+        } finally {
+            unset($this->pendingEvents[$eventKey]);
+        }
     }
 
     public function ping(RelayUrl $relayUrl): bool
@@ -327,17 +341,107 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $urlString = (string) $relayUrl;
         $responseKey = $urlString.':'.$eventIdHex;
 
+        if ($this->isAuthOkResponse($relayUrl, $message)) {
+            return;
+        }
+
         if (isset($this->pendingResponses[$responseKey])) {
             $future = $this->pendingResponses[$responseKey];
             unset($this->pendingResponses[$responseKey]);
 
             if ($message->isAccepted()) {
                 $future->complete(true);
+            } elseif ($message->isAuthRequired()) {
+                $this->queueAuthRetry($relayUrl, $eventIdHex, $future);
             } else {
                 $future->error(
                     ConnectionException::forRelay($relayUrl, 'Event rejected: '.$message->getMessage())
                 );
             }
+        }
+    }
+
+    private function isAuthOkResponse(RelayUrl $relayUrl, OkMessage $message): bool
+    {
+        $urlString = (string) $relayUrl;
+        $retryKey = $urlString.':auth-event:'.$message->getEventId()->toHex();
+
+        if (!isset($this->pendingResponses[$retryKey])) {
+            return false;
+        }
+
+        $authDeferred = $this->pendingResponses[$retryKey];
+        unset($this->pendingResponses[$retryKey]);
+
+        if ($message->isAccepted()) {
+            $authDeferred->complete(true);
+            $this->flushAuthRetryQueue($relayUrl);
+        } else {
+            $authDeferred->error(
+                ConnectionException::forRelay($relayUrl, 'Auth rejected: '.$message->getMessage())
+            );
+            $this->failAuthRetryQueue($relayUrl, $message->getMessage());
+        }
+
+        return true;
+    }
+
+    private function queueAuthRetry(RelayUrl $relayUrl, string $eventIdHex, DeferredFuture $deferred): void
+    {
+        $urlString = (string) $relayUrl;
+
+        if (!isset($this->authRetryQueue[$urlString])) {
+            $this->authRetryQueue[$urlString] = [];
+        }
+
+        $this->authRetryQueue[$urlString][] = [
+            'event_id_hex' => $eventIdHex,
+            'deferred' => $deferred,
+        ];
+    }
+
+    private function flushAuthRetryQueue(RelayUrl $relayUrl): void
+    {
+        $urlString = (string) $relayUrl;
+        $queue = $this->authRetryQueue[$urlString] ?? [];
+        unset($this->authRetryQueue[$urlString]);
+
+        foreach ($queue as $entry) {
+            $eventKey = $urlString.':'.$entry['event_id_hex'];
+            $event = $this->pendingEvents[$eventKey] ?? null;
+
+            if (null === $event) {
+                $entry['deferred']->error(
+                    ConnectionException::forRelay($relayUrl, 'Auth retry failed: event no longer available')
+                );
+                continue;
+            }
+
+            $responseKey = $urlString.':'.$entry['event_id_hex'];
+            $this->pendingResponses[$responseKey] = $entry['deferred'];
+
+            try {
+                $websocket = $this->getWebsocket($relayUrl);
+                $websocket->sendText((new EventMessage($event))->toJson());
+            } catch (Throwable $e) {
+                unset($this->pendingResponses[$responseKey]);
+                $entry['deferred']->error(
+                    ConnectionException::forRelay($relayUrl, 'Auth retry failed: '.$e->getMessage())
+                );
+            }
+        }
+    }
+
+    private function failAuthRetryQueue(RelayUrl $relayUrl, string $reason): void
+    {
+        $urlString = (string) $relayUrl;
+        $queue = $this->authRetryQueue[$urlString] ?? [];
+        unset($this->authRetryQueue[$urlString]);
+
+        foreach ($queue as $entry) {
+            $entry['deferred']->error(
+                ConnectionException::forRelay($relayUrl, 'Auth failed: '.$reason)
+            );
         }
     }
 
@@ -540,6 +644,18 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         foreach (array_keys($this->subscriptionHandlers) as $key) {
             if (str_starts_with($key, $prefix)) {
                 unset($this->subscriptionHandlers[$key]);
+            }
+        }
+    }
+
+    private function clearPendingForRelay(string $urlString): void
+    {
+        unset($this->authRetryQueue[$urlString]);
+
+        $prefix = $urlString.':';
+        foreach (array_keys($this->pendingEvents) as $key) {
+            if (str_starts_with($key, $prefix)) {
+                unset($this->pendingEvents[$key]);
             }
         }
     }
