@@ -15,7 +15,7 @@
         "php": "^8.3",
         "amphp/amp": "^3.0",
         "amphp/websocket-client": "^2.0",
-        "innis/nostr-core": "^0.1",
+        "innis/nostr-core": "^0.2",
         "psr/log": "^3.0"
     },
     "require-dev": {
