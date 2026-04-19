@@ -15,7 +15,7 @@
         "php": "^8.3",
         "amphp/amp": "^3.0",
         "amphp/websocket-client": "^2.0",
-        "innis/nostr-core": "^0.2",
+        "innis/nostr-core": "^0.3",
         "psr/log": "^3.0"
     },
     "require-dev": {
@@ -36,10 +36,9 @@
     },
     "scripts": {
         "test": [
-            "@test-unit",
+            "phpunit",
             "@analyse"
         ],
-        "test-all": "phpunit",
         "test-unit": "phpunit --testsuite=Unit",
         "test-coverage": "XDEBUG_MODE=coverage phpunit --coverage-html var/tests/coverage/html --coverage-text --coverage-clover var/tests/coverage/clover.xml",
         "analyse": "phpstan analyse",

@@ -10,9 +10,10 @@ A PHP client library for connecting to Nostr relays over WebSocket, subscribing 
 
 - **Multi-relay connections** - Connect to multiple relays concurrently
 - **AMPHP async** - Non-blocking WebSocket I/O with fibers
-- **Subscription management** - Subscribe with filters, receive events via handler callbacks
+- **Subscription management** - Subscribe with single or multiple filters, receive events via handler callbacks
 - **Event publishing** - Publish signed events with OK response handling
-- **Connection lifecycle** - Automatic state tracking, health checks, reconnection
+- **NIP-42 authentication** - Automatic auth challenge handling with transparent publish retry
+- **Connection lifecycle** - Automatic state tracking, health checks, reconnection, ping
 - **Keep-alive handling** - WebSocket heartbeats and application-level ping responses
 - **PSR-3 logging** - Standard logging interface throughout
 - **Clean Architecture** - Strict layer separation with domain objects from `innis/nostr-core`
@@ -102,6 +103,49 @@ foreach ($results as $relayUrl => $result) {
         echo "{$relayUrl}: {$result->getErrorMessage()}\n";
     }
 }
+```
+
+### Multiple Filters Per Subscription
+
+```php
+$subscriptionId = $client->subscribeMultiple(
+    $relay,
+    [
+        new Filter(kinds: [EventKind::textNote()], limit: 10),
+        new Filter(kinds: [EventKind::reaction()], limit: 10),
+    ],
+    $handler,
+);
+```
+
+### Connection Management
+
+```php
+$client->reconnect($relay);
+$client->ping($relay);
+$state = $client->getConnectionStatus($relay);
+```
+
+### NIP-42 Authentication
+
+Register an auth handler to sign relay challenges. When `publishEvent()` is rejected with `auth-required`, the client completes the challenge-response flow and retransmits the queued event transparently.
+
+```php
+use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Core\Domain\Factory\EventFactory;
+
+$authHandler = new class($keyPair) implements AuthChallengeHandlerInterface {
+    public function __construct(private KeyPair $keyPair) {}
+
+    public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
+    {
+        $event = EventFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge);
+
+        return $event->sign($this->keyPair->getPrivateKey());
+    }
+};
+
+$client->setAuthHandler($authHandler);
 ```
 
 ### Standalone Health Checker
