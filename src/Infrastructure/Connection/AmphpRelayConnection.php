@@ -193,7 +193,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
-    public function publishEvent(RelayUrl $relayUrl, Event $event): bool
+    public function publishEvent(RelayUrl $relayUrl, Event $event, bool $waitForOk = true): bool
     {
         $websocket = $this->getWebsocket($relayUrl);
         $eventKey = (string) $relayUrl.':'.$event->getId()->toHex();
@@ -201,6 +201,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         $message = new EventMessage($event);
         $websocket->sendText($message->toJson());
+
+        if (!$waitForOk) {
+            unset($this->pendingEvents[$eventKey]);
+            return true;
+        }
 
         try {
             return $this->waitForOkResponse($relayUrl, $event->getId())->await();
@@ -330,6 +335,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     'relay' => (string) $relayUrl,
                     'subscription_id' => (string) $subscriptionId,
                     'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
                 ]);
             }
         }
