@@ -4,10 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
-use Amp\CancelledException;
 use Amp\DeferredFuture;
-use Amp\Future;
-use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -21,7 +18,6 @@ use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
 use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
 use Innis\Nostr\Core\Domain\Service\MessageSerialiserInterface;
-use Innis\Nostr\Core\Domain\ValueObject\Identity\EventId;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\AuthMessage as ClientAuthMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
@@ -45,8 +41,6 @@ use function Amp\weakClosure;
 
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
-    private const int EVENT_RESPONSE_TIMEOUT_SECONDS = 10;
-
     private ?AuthChallengeHandlerInterface $authHandler = null;
     private array $connections = [];
     private array $activeWebSockets = [];
@@ -202,11 +196,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $message = new EventMessage($event);
         $websocket->sendText($message->toJson());
 
-        try {
-            return $this->waitForOkResponse($relayUrl, $event->getId())->await();
-        } finally {
-            unset($this->pendingEvents[$eventKey]);
-        }
+        return true;
     }
 
     public function ping(RelayUrl $relayUrl): bool
@@ -615,22 +605,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         unset($this->activeWebSockets[$urlString]);
-    }
-
-    private function waitForOkResponse(RelayUrl $relayUrl, EventId $eventId, int $timeoutSeconds = self::EVENT_RESPONSE_TIMEOUT_SECONDS): Future
-    {
-        return async(function () use ($relayUrl, $eventId, $timeoutSeconds) {
-            $responseKey = (string) $relayUrl.':'.$eventId->toHex();
-            $future = new DeferredFuture();
-            $this->pendingResponses[$responseKey] = $future;
-
-            try {
-                return $future->getFuture()->await(new TimeoutCancellation($timeoutSeconds));
-            } catch (CancelledException) {
-                unset($this->pendingResponses[$responseKey]);
-                throw ConnectionException::timeout($relayUrl, $timeoutSeconds);
-            }
-        });
     }
 
     private function handlerKey(RelayUrl $relayUrl, SubscriptionId $subscriptionId): string

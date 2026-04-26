@@ -17,7 +17,6 @@ parameters:
             identifier: missingType.generics
         # Amp async() loses generic type parameters - PHP cannot express Future<T> natively
         - '#Parameter .+ expects .+, mixed given#'
-        - '#should return .+ but returns mixed#'
         - '#Cannot call method .+\(\) on mixed#'
         # Test assertions that verify runtime behaviour are valid even when PHPStan can infer the result statically
         -
