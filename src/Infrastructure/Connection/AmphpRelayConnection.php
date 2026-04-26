@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
+use Amp\CancelledException;
+use Amp\DeferredCancellation;
 use Amp\DeferredFuture;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
@@ -37,6 +39,7 @@ use RuntimeException;
 use Throwable;
 
 use function Amp\async;
+use function Amp\delay;
 use function Amp\weakClosure;
 
 final class AmphpRelayConnection implements ConnectionHandlerInterface
@@ -49,6 +52,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     private array $subscriptionHandlers = [];
     private array $authRetryQueue = [];
     private array $pendingEvents = [];
+    private array $reconnectCancellations = [];
 
     public function __construct(
         private readonly ConnectionFactory $connectionFactory,
@@ -106,9 +110,17 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         $urlString = (string) $relayUrl;
 
+        if (isset($this->reconnectCancellations[$urlString])) {
+            $this->reconnectCancellations[$urlString]->cancel();
+            unset($this->reconnectCancellations[$urlString]);
+        }
+
         if (isset($this->connections[$urlString])) {
             $connection = $this->connections[$urlString];
-            $connection->updateState(ConnectionState::DISCONNECTING);
+
+            if (ConnectionState::CONNECTED === $connection->getState()) {
+                $connection->updateState(ConnectionState::DISCONNECTING);
+            }
 
             $this->connectionGenerations[$urlString] = ($this->connectionGenerations[$urlString] ?? 0) + 1;
 
@@ -127,7 +139,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $this->clearHandlersForRelay($urlString);
             $this->clearPendingForRelay($urlString);
 
-            $connection->updateState(ConnectionState::DISCONNECTED);
+            if (ConnectionState::DISCONNECTING === $connection->getState()) {
+                $connection->updateState(ConnectionState::DISCONNECTED);
+            }
             unset($this->connections[$urlString]);
         }
     }
@@ -605,6 +619,95 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         unset($this->activeWebSockets[$urlString]);
+
+        if (null !== $connection && $connection->getConfig()->isAutoReconnect()) {
+            $this->scheduleReconnect($relayUrl, $connection->getConfig());
+        }
+    }
+
+    private function scheduleReconnect(RelayUrl $relayUrl, ConnectionConfig $config): void
+    {
+        $urlString = (string) $relayUrl;
+
+        if (isset($this->reconnectCancellations[$urlString])) {
+            return;
+        }
+
+        $deferred = new DeferredCancellation();
+        $this->reconnectCancellations[$urlString] = $deferred;
+        $cancellation = $deferred->getCancellation();
+
+        async(weakClosure(function () use ($relayUrl, $config, $cancellation, $urlString): void {
+            $initialMs = $config->getReconnectInitialDelayMs();
+            $maxMs = $config->getReconnectMaxDelayMs();
+            $maxAttempts = $config->getReconnectMaxAttempts();
+            $attempt = 0;
+
+            while (0 === $maxAttempts || $attempt < $maxAttempts) {
+                $delayMs = (int) min($initialMs * (2 ** $attempt), $maxMs);
+                $jitterMs = random_int(0, (int) ($delayMs * 0.25));
+                $totalSeconds = ($delayMs + $jitterMs) / 1000.0;
+
+                try {
+                    delay($totalSeconds, cancellation: $cancellation);
+                } catch (CancelledException) {
+                    return;
+                }
+
+                ++$attempt;
+
+                $this->logger->info('Attempting relay reconnect', [
+                    'relay' => $urlString,
+                    'attempt' => $attempt,
+                    'delay_ms' => $delayMs + $jitterMs,
+                ]);
+
+                try {
+                    $this->connect($relayUrl, $config);
+                } catch (Throwable $e) {
+                    $this->logger->warning('Relay reconnect attempt failed', [
+                        'relay' => $urlString,
+                        'attempt' => $attempt,
+                        'error' => $e->getMessage(),
+                    ]);
+                    continue;
+                }
+
+                if (!isset($this->reconnectCancellations[$urlString])) {
+                    $this->disconnect($relayUrl);
+
+                    return;
+                }
+
+                unset($this->reconnectCancellations[$urlString]);
+
+                $this->logger->info('Relay reconnect succeeded', [
+                    'relay' => $urlString,
+                    'attempt' => $attempt,
+                ]);
+
+                $callback = $config->getOnReconnected();
+                if (null !== $callback) {
+                    try {
+                        $callback($relayUrl);
+                    } catch (Throwable $e) {
+                        $this->logger->error('onReconnected callback threw', [
+                            'relay' => $urlString,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                return;
+            }
+
+            unset($this->reconnectCancellations[$urlString]);
+
+            $this->logger->error('Relay reconnect gave up after max attempts', [
+                'relay' => $urlString,
+                'attempts' => $attempt,
+            ]);
+        }))->ignore();
     }
 
     private function handlerKey(RelayUrl $relayUrl, SubscriptionId $subscriptionId): string
