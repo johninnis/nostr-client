@@ -246,7 +246,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $task = async(weakClosure(function () use ($relayUrl, $websocket, $urlString, $generation) {
             try {
                 foreach ($websocket as $message) {
-                    $this->handleMessage($relayUrl, $message->buffer());
+                    $payload = $message->buffer();
+                    async(weakClosure(function () use ($relayUrl, $payload): void {
+                        $this->handleMessage($relayUrl, $payload);
+                    }))->ignore();
                 }
 
                 if (($this->connectionGenerations[$urlString] ?? 0) === $generation) {
