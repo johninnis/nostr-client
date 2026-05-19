@@ -21,36 +21,50 @@ use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
 final class ConnectionManagerTest extends TestCase
 {
-    private ConnectionHandlerInterface&MockObject $connectionHandler;
-    private ConnectionManager $manager;
     private RelayUrl $relayUrl;
     private array $handlerConnections = [];
 
     protected function setUp(): void
     {
-        $this->connectionHandler = $this->createMock(ConnectionHandlerInterface::class);
-
-        $this->connectionHandler
-            ->method('getConnection')
-            ->willReturnCallback(fn (RelayUrl $url) => $this->handlerConnections[(string) $url] ?? null);
-
-        $this->connectionHandler
-            ->method('isConnected')
-            ->willReturnCallback(fn (RelayUrl $url) => isset($this->handlerConnections[(string) $url]) && $this->handlerConnections[(string) $url]->isHealthy());
-
-        $this->connectionHandler
-            ->method('getAllConnections')
-            ->willReturnCallback(fn () => new RelayConnectionCollection(array_values($this->handlerConnections)));
-
-        $this->manager = new ConnectionManager($this->connectionHandler);
-
         $relayUrl = RelayUrl::fromString('wss://relay.example.com');
         self::assertNotNull($relayUrl);
         $this->relayUrl = $relayUrl;
+    }
+
+    private function configureConnectionStateAccess(Stub $handler): void
+    {
+        $handler
+            ->method('getConnection')
+            ->willReturnCallback(fn (RelayUrl $url) => $this->handlerConnections[(string) $url] ?? null);
+
+        $handler
+            ->method('isConnected')
+            ->willReturnCallback(fn (RelayUrl $url) => isset($this->handlerConnections[(string) $url]) && $this->handlerConnections[(string) $url]->isHealthy());
+
+        $handler
+            ->method('getAllConnections')
+            ->willReturnCallback(fn () => new RelayConnectionCollection(array_values($this->handlerConnections)));
+    }
+
+    private function createHandlerStub(): ConnectionHandlerInterface&Stub
+    {
+        $handler = $this->createStub(ConnectionHandlerInterface::class);
+        $this->configureConnectionStateAccess($handler);
+
+        return $handler;
+    }
+
+    private function createHandlerMock(): ConnectionHandlerInterface&MockObject
+    {
+        $handler = $this->createMock(ConnectionHandlerInterface::class);
+        $this->configureConnectionStateAccess($handler);
+
+        return $handler;
     }
 
     private function establishConnection(?ConnectionConfig $config = null): RelayConnection
@@ -64,10 +78,12 @@ final class ConnectionManagerTest extends TestCase
 
     public function testConnectCreatesNewConnection(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('connect')
             ->with($this->relayUrl, $config)
@@ -75,50 +91,56 @@ final class ConnectionManagerTest extends TestCase
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
             });
 
-        $this->manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
 
-        $this->assertTrue($this->manager->isConnected($this->relayUrl));
+        $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
     public function testConnectWithDefaultConfig(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, new ConnectionConfig());
 
-        $this->connectionHandler
+        $handler
             ->method('connect')
             ->willReturnCallback(function () use ($connection): void {
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
             });
 
-        $this->manager->connect($this->relayUrl);
+        $manager->connect($this->relayUrl);
 
-        $this->assertTrue($this->manager->isConnected($this->relayUrl));
+        $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
     public function testConnectReturnsExistingHealthyConnection(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('connect')
             ->willReturnCallback(function () use ($connection): void {
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
             });
 
-        $this->manager->connect($this->relayUrl, $config);
-        $this->manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
 
-        $this->assertTrue($this->manager->isConnected($this->relayUrl));
+        $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
     public function testConnectThrowsOnFailure(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $exception = new ConnectionException('Connection failed');
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('connect')
             ->willThrowException($exception);
@@ -126,17 +148,19 @@ final class ConnectionManagerTest extends TestCase
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Connection failed');
 
-        $this->manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
     }
 
     public function testConnectRecordsFailureWhenConnectionExists(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $exception = new ConnectionException('Connection failed');
 
         $connectCallCount = 0;
-        $this->connectionHandler
+        $handler
             ->method('connect')
             ->willReturnCallback(function () use (&$connectCallCount, $connection, $exception): void {
                 ++$connectCallCount;
@@ -147,19 +171,21 @@ final class ConnectionManagerTest extends TestCase
                 }
             });
 
-        $this->manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
         $connection->updateState(ConnectionState::FAILED);
 
         $this->expectException(ConnectionException::class);
 
-        $this->manager->connect($this->relayUrl, $config);
+        $manager->connect($this->relayUrl, $config);
     }
 
     public function testDisconnectRemovesConnection(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('disconnect')
             ->with($this->relayUrl)
@@ -167,46 +193,50 @@ final class ConnectionManagerTest extends TestCase
                 unset($this->handlerConnections[(string) $url]);
             });
 
-        $this->manager->disconnect($this->relayUrl);
+        $manager->disconnect($this->relayUrl);
 
-        $this->assertFalse($this->manager->isConnected($this->relayUrl));
-        $this->assertNull($this->manager->getConnection($this->relayUrl));
+        $this->assertFalse($manager->isConnected($this->relayUrl));
+        $this->assertNull($manager->getConnection($this->relayUrl));
     }
 
     public function testDisconnectUnsubscribesAll(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $subscriptionId = SubscriptionId::fromString('test-sub');
 
         $this->handlerConnections[(string) $this->relayUrl] = $connection;
 
-        $this->connectionHandler
+        $handler
             ->method('subscribe')
             ->willReturnCallback(static function () use ($connection, $subscriptionId): void {
                 $connection->addSubscription($subscriptionId, [new Filter()]);
             });
 
-        $handler = $this->createMock(EventHandlerInterface::class);
-        $this->manager->subscribe($this->relayUrl, new Filter(), $handler, $subscriptionId);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
+        $manager->subscribe($this->relayUrl, new Filter(), $eventHandler, $subscriptionId);
 
         $this->assertTrue($connection->hasSubscription($subscriptionId));
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('unsubscribe')
             ->with($this->relayUrl, $this->callback(
                 static fn (SubscriptionId $id) => 'test-sub' === (string) $id
             ));
 
-        $this->manager->disconnect($this->relayUrl);
+        $manager->disconnect($this->relayUrl);
     }
 
     public function testReconnectDisconnectsAndReconnects(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('disconnect')
             ->with($this->relayUrl)
@@ -214,75 +244,85 @@ final class ConnectionManagerTest extends TestCase
                 unset($this->handlerConnections[(string) $url]);
             });
 
-        $this->connectionHandler
+        $handler
             ->method('connect')
             ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): void {
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $config);
             });
 
-        $this->manager->reconnect($this->relayUrl);
+        $manager->reconnect($this->relayUrl);
 
-        $this->assertTrue($this->manager->isConnected($this->relayUrl));
+        $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
     public function testSubscribeEnsuresConnection(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $filter = new Filter();
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
 
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $this->manager->subscribe($this->relayUrl, $filter, $handler);
+        $manager->subscribe($this->relayUrl, $filter, $eventHandler);
     }
 
     public function testSubscribeReturnsGeneratedSubscriptionId(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
         $filter = new Filter();
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('subscribe');
 
-        $subscriptionId = $this->manager->subscribe($this->relayUrl, $filter, $handler);
+        $subscriptionId = $manager->subscribe($this->relayUrl, $filter, $eventHandler);
 
         $this->assertInstanceOf(SubscriptionId::class, $subscriptionId);
     }
 
     public function testSubscribeWithExplicitId(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
         $filter = new Filter();
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
         $explicitId = SubscriptionId::fromString('my-subscription');
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('subscribe')
-            ->with($this->relayUrl, $explicitId, $filter, $handler);
+            ->with($this->relayUrl, $explicitId, $filter, $eventHandler);
 
-        $returnedId = $this->manager->subscribe($this->relayUrl, $filter, $handler, $explicitId);
+        $returnedId = $manager->subscribe($this->relayUrl, $filter, $eventHandler, $explicitId);
 
         $this->assertSame('my-subscription', (string) $returnedId);
     }
 
     public function testUnsubscribeRemovesSubscription(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $connection = $this->establishConnection();
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
 
-        $subscriptionId = $this->manager->subscribe($this->relayUrl, new Filter(), $handler);
-        $this->manager->unsubscribe($this->relayUrl, $subscriptionId);
+        $subscriptionId = $manager->subscribe($this->relayUrl, new Filter(), $eventHandler);
+        $manager->unsubscribe($this->relayUrl, $subscriptionId);
 
         $this->assertFalse($connection->hasSubscription($subscriptionId));
     }
 
     public function testPublishEventEnsuresConnection(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $pubkey = PublicKey::fromHex(str_pad('1', 64, '0', STR_PAD_LEFT));
         self::assertNotNull($pubkey);
         $event = EventFactory::createTextNote($pubkey, 'Test event');
@@ -290,59 +330,73 @@ final class ConnectionManagerTest extends TestCase
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $this->manager->publishEvent($this->relayUrl, $event);
+        $manager->publishEvent($this->relayUrl, $event);
     }
 
     public function testPublishEvent(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
         $pubkey = PublicKey::fromHex('abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234');
         self::assertNotNull($pubkey);
         $event = EventFactory::createTextNote($pubkey, 'Test event content');
 
-        $this->connectionHandler
+        $handler
             ->method('publishEvent')
             ->willReturn(true);
 
-        $result = $this->manager->publishEvent($this->relayUrl, $event);
+        $result = $manager->publishEvent($this->relayUrl, $event);
         $this->assertTrue($result);
     }
 
     public function testGetConnectedRelays(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $connectedRelays = $this->manager->getConnectedRelays();
+        $connectedRelays = $manager->getConnectedRelays();
         $this->assertCount(1, $connectedRelays);
         $this->assertTrue($this->relayUrl->equals($connectedRelays->toArray()[0]->getRelayUrl()));
     }
 
     public function testGetConnectedRelaysReturnsEmptyWhenNoConnections(): void
     {
-        $result = $this->manager->getConnectedRelays();
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
+        $result = $manager->getConnectedRelays();
         $this->assertTrue($result->isEmpty());
     }
 
     public function testGetConnectionStatusReturnsDisconnectedForUnknownRelay(): void
     {
-        $status = $this->manager->getConnectionStatus($this->relayUrl);
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
+        $status = $manager->getConnectionStatus($this->relayUrl);
         $this->assertSame(ConnectionState::DISCONNECTED, $status);
     }
 
     public function testGetConnectionStatusReturnsCorrectState(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $status = $this->manager->getConnectionStatus($this->relayUrl);
+        $status = $manager->getConnectionStatus($this->relayUrl);
         $this->assertSame(ConnectionState::CONNECTED, $status);
     }
 
     public function testCloseDisconnectsAll(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('disconnect')
             ->with($this->relayUrl)
@@ -350,13 +404,15 @@ final class ConnectionManagerTest extends TestCase
                 unset($this->handlerConnections[(string) $url]);
             });
 
-        $this->manager->close();
+        $manager->close();
 
-        $this->assertFalse($this->manager->isConnected($this->relayUrl));
+        $this->assertFalse($manager->isConnected($this->relayUrl));
     }
 
     public function testHealthCheckRunsOnAllConnections(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $relay2 = RelayUrl::fromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
@@ -364,11 +420,11 @@ final class ConnectionManagerTest extends TestCase
         $this->handlerConnections[(string) $this->relayUrl] = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $this->handlerConnections[(string) $relay2] = new RelayConnection($relay2, ConnectionState::CONNECTED, $config);
 
-        $this->connectionHandler
+        $handler
             ->method('ping')
             ->willReturn(true);
 
-        $results = $this->manager->healthCheck();
+        $results = $manager->healthCheck();
 
         $this->assertCount(2, $results);
         foreach ($results as $result) {
@@ -379,9 +435,11 @@ final class ConnectionManagerTest extends TestCase
 
     public function testGetAllConnections(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $connection = $this->establishConnection();
 
-        $connections = $this->manager->getAllConnections();
+        $connections = $manager->getAllConnections();
 
         $this->assertCount(1, $connections);
         $this->assertSame($connection, $connections->toArray()[0]);
@@ -389,76 +447,88 @@ final class ConnectionManagerTest extends TestCase
 
     public function testSetAuthHandlerDelegatesToConnectionHandler(): void
     {
-        $authHandler = $this->createMock(AuthChallengeHandlerInterface::class);
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
+        $authHandler = $this->createStub(AuthChallengeHandlerInterface::class);
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('setAuthHandler')
             ->with($authHandler);
 
-        $this->manager->setAuthHandler($authHandler);
+        $manager->setAuthHandler($authHandler);
     }
 
     public function testPingDelegatesToConnectionHandler(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('ping')
             ->with($this->relayUrl)
             ->willReturn(true);
 
-        $this->assertTrue($this->manager->ping($this->relayUrl));
+        $this->assertTrue($manager->ping($this->relayUrl));
     }
 
     public function testPingEnsuresConnection(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $this->manager->ping($this->relayUrl);
+        $manager->ping($this->relayUrl);
     }
 
     public function testReconnectWithUnknownRelayUsesDefaultConfig(): void
     {
-        $this->connectionHandler
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
+        $handler
             ->method('disconnect')
             ->willReturnCallback(function (RelayUrl $url): void {
                 unset($this->handlerConnections[(string) $url]);
             });
 
-        $this->connectionHandler
+        $handler
             ->method('connect')
             ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): void {
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $config);
             });
 
-        $this->manager->reconnect($this->relayUrl);
+        $manager->reconnect($this->relayUrl);
 
-        $this->assertTrue($this->manager->isConnected($this->relayUrl));
+        $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
     public function testReconnectPreservesExistingConfig(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig(connectionTimeoutSeconds: 30);
 
         $connectConfigs = [];
-        $this->connectionHandler
+        $handler
             ->method('connect')
             ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $c) use (&$connectConfigs): void {
                 $connectConfigs[] = $c;
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $c);
             });
 
-        $this->connectionHandler
+        $handler
             ->method('disconnect')
             ->willReturnCallback(function (RelayUrl $url): void {
                 unset($this->handlerConnections[(string) $url]);
             });
 
-        $this->manager->connect($this->relayUrl, $config);
-        $this->manager->reconnect($this->relayUrl);
+        $manager->connect($this->relayUrl, $config);
+        $manager->reconnect($this->relayUrl);
 
         $this->assertCount(2, $connectConfigs);
         $this->assertSame(30, $connectConfigs[1]->getConnectionTimeoutSeconds());
@@ -466,59 +536,71 @@ final class ConnectionManagerTest extends TestCase
 
     public function testSubscribeMultipleEnsuresConnection(): void
     {
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
 
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $this->manager->subscribeMultiple($this->relayUrl, [new Filter()], $handler);
+        $manager->subscribeMultiple($this->relayUrl, [new Filter()], $eventHandler);
     }
 
     public function testSubscribeMultipleDelegatesToHandler(): void
     {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
         $filters = [new Filter(), new Filter()];
-        $handler = $this->createMock(EventHandlerInterface::class);
+        $eventHandler = $this->createStub(EventHandlerInterface::class);
         $explicitId = SubscriptionId::fromString('multi-sub');
 
-        $this->connectionHandler
+        $handler
             ->expects($this->once())
             ->method('subscribeMultiple')
-            ->with($this->relayUrl, $explicitId, $filters, $handler);
+            ->with($this->relayUrl, $explicitId, $filters, $eventHandler);
 
-        $returnedId = $this->manager->subscribeMultiple($this->relayUrl, $filters, $handler, $explicitId);
+        $returnedId = $manager->subscribeMultiple($this->relayUrl, $filters, $eventHandler, $explicitId);
 
         $this->assertSame('multi-sub', (string) $returnedId);
     }
 
     public function testUnsubscribeEnsuresConnection(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $this->manager->unsubscribe($this->relayUrl, SubscriptionId::fromString('sub-1'));
+        $manager->unsubscribe($this->relayUrl, SubscriptionId::fromString('sub-1'));
     }
 
     public function testDisconnectOnUnknownRelayIsNoop(): void
     {
-        $this->connectionHandler
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
+
+        $handler
             ->expects($this->never())
             ->method('disconnect');
 
-        $this->manager->disconnect($this->relayUrl);
+        $manager->disconnect($this->relayUrl);
     }
 
     public function testHealthCheckReturnsFailureOnPingError(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $this->handlerConnections[(string) $this->relayUrl] = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
-        $this->connectionHandler
+        $handler
             ->method('ping')
             ->willThrowException(new ConnectionException('Ping failed'));
 
-        $results = $this->manager->healthCheck();
+        $results = $manager->healthCheck();
 
         $this->assertInstanceOf(HealthCheckResultCollection::class, $results);
         $this->assertCount(1, $results);
@@ -531,7 +613,10 @@ final class ConnectionManagerTest extends TestCase
 
     public function testHealthCheckReturnsEmptyForNoConnections(): void
     {
-        $results = $this->manager->healthCheck();
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
+
+        $results = $manager->healthCheck();
 
         $this->assertInstanceOf(HealthCheckResultCollection::class, $results);
         $this->assertTrue($results->isEmpty());
@@ -539,6 +624,8 @@ final class ConnectionManagerTest extends TestCase
 
     public function testGetConnectedRelaysExcludesUnhealthyConnections(): void
     {
+        $handler = $this->createHandlerStub();
+        $manager = new ConnectionManager($handler);
         $config = new ConnectionConfig();
         $healthyConnection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $relay2 = RelayUrl::fromString('wss://relay2.example.com');
@@ -548,7 +635,7 @@ final class ConnectionManagerTest extends TestCase
         $this->handlerConnections[(string) $this->relayUrl] = $healthyConnection;
         $this->handlerConnections[(string) $relay2] = $unhealthyConnection;
 
-        $connectedRelays = $this->manager->getConnectedRelays();
+        $connectedRelays = $manager->getConnectedRelays();
 
         $this->assertCount(1, $connectedRelays);
         $this->assertSame($healthyConnection, $connectedRelays->toArray()[0]);
