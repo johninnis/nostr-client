@@ -28,6 +28,8 @@ interface NostrClientInterface
 
     public function publishEvent(RelayUrl $relay, Event $event): bool;
 
+    public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void;
+
     public function subscribe(
         RelayUrl $relay,
         Filter $filter,

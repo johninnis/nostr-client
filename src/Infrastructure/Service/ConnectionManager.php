@@ -141,6 +141,11 @@ final class ConnectionManager implements NostrClientInterface
         return $this->connectionHandler->publishEvent($relay, $event);
     }
 
+    public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void
+    {
+        $this->connectionHandler->awaitPendingPublishes($relay, $timeoutSeconds);
+    }
+
     public function isConnected(RelayUrl $relay): bool
     {
         $connection = $this->getConnection($relay);

@@ -18,6 +18,8 @@ parameters:
         # Amp async() loses generic type parameters - PHP cannot express Future<T> natively
         - '#Parameter .+ expects .+, mixed given#'
         - '#Cannot call method .+\(\) on mixed#'
+        -
+            identifier: argument.templateType
         # Test assertions that verify runtime behaviour are valid even when PHPStan can infer the result statically
         -
             identifier: method.alreadyNarrowedType

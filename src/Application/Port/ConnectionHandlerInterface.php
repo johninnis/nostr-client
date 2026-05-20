@@ -32,6 +32,8 @@ interface ConnectionHandlerInterface
 
     public function publishEvent(RelayUrl $relayUrl, Event $event): bool;
 
+    public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void;
+
     public function ping(RelayUrl $relayUrl): bool;
 
     public function isConnected(RelayUrl $relayUrl): bool;

@@ -7,6 +7,7 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 use Amp\CancelledException;
 use Amp\DeferredCancellation;
 use Amp\DeferredFuture;
+use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -40,6 +41,7 @@ use Throwable;
 
 use function Amp\async;
 use function Amp\delay;
+use function Amp\Future\awaitAll;
 use function Amp\weakClosure;
 
 final class AmphpRelayConnection implements ConnectionHandlerInterface
@@ -207,10 +209,41 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $eventKey = (string) $relayUrl.':'.$event->getId()->toHex();
         $this->pendingEvents[$eventKey] = $event;
 
+        $deferred = new DeferredFuture();
+        $deferred->getFuture()->ignore();
+        $this->pendingResponses[$eventKey] = $deferred;
+
         $message = new EventMessage($event);
         $websocket->sendText($message->toJson());
 
         return true;
+    }
+
+    public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void
+    {
+        $urlString = (string) $relayUrl;
+        $prefix = $urlString.':';
+
+        $futures = [];
+        foreach ($this->pendingResponses as $key => $deferred) {
+            if (str_starts_with($key, $prefix)) {
+                $futures[] = $deferred->getFuture();
+            }
+        }
+        foreach ($this->authRetryQueue[$urlString] ?? [] as $entry) {
+            $futures[] = $entry['deferred']->getFuture();
+        }
+
+        if (empty($futures)) {
+            return;
+        }
+
+        $cancellation = null !== $timeoutSeconds ? new TimeoutCancellation($timeoutSeconds) : null;
+
+        try {
+            awaitAll($futures, $cancellation);
+        } catch (CancelledException) {
+        }
     }
 
     public function ping(RelayUrl $relayUrl): bool
@@ -736,6 +769,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         foreach (array_keys($this->pendingEvents) as $key) {
             if (str_starts_with($key, $prefix)) {
                 unset($this->pendingEvents[$key]);
+            }
+        }
+
+        foreach (array_keys($this->pendingResponses) as $key) {
+            if (str_starts_with($key, $prefix)) {
+                unset($this->pendingResponses[$key]);
             }
         }
     }
