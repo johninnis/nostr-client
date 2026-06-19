@@ -1,5 +1,7 @@
 # innis/nostr-client
 
+[![CI](https://github.com/johninnis/nostr-client/actions/workflows/ci.yml/badge.svg)](https://github.com/johninnis/nostr-client/actions/workflows/ci.yml)
+
 **AMPHP-based async WebSocket client for Nostr protocol**
 
 A PHP client library for connecting to Nostr relays over WebSocket, subscribing to events, and publishing. Built with AMPHP for non-blocking concurrent relay connections and clean architecture principles.
