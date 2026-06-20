@@ -342,6 +342,14 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         try {
             $message = $this->deserialiser->deserialiseRelayMessage($jsonMessage);
 
+            if (null === $message) {
+                $this->logger->warning('Unknown or malformed relay message', [
+                    'relay' => (string) $relayUrl,
+                ]);
+
+                return;
+            }
+
             match (true) {
                 $message instanceof RelayEventMessage => $this->handleEventMessage($relayUrl, $message),
                 $message instanceof OkMessage => $this->handleOkMessage($relayUrl, $message),
