@@ -8,6 +8,7 @@ use ArrayIterator;
 use Countable;
 use InvalidArgumentException;
 use IteratorAggregate;
+use Override;
 
 final readonly class RelayConnectionCollection implements IteratorAggregate, Countable
 {
@@ -51,11 +52,13 @@ final readonly class RelayConnectionCollection implements IteratorAggregate, Cou
         return $this->connections;
     }
 
+    #[Override]
     public function getIterator(): ArrayIterator
     {
         return new ArrayIterator($this->connections);
     }
 
+    #[Override]
     public function count(): int
     {
         return count($this->connections);

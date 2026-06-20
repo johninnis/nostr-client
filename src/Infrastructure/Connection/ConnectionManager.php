@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Infrastructure\Service;
+namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\NostrClientInterface;
@@ -19,6 +19,7 @@ use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
+use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
@@ -36,11 +37,13 @@ final class ConnectionManager implements NostrClientInterface
     ) {
     }
 
+    #[Override]
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
     {
         $this->connectionHandler->setAuthHandler($handler);
     }
 
+    #[Override]
     public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): void
     {
         $config ??= new ConnectionConfig();
@@ -76,6 +79,7 @@ final class ConnectionManager implements NostrClientInterface
         }
     }
 
+    #[Override]
     public function disconnect(RelayUrl $relay): void
     {
         $urlString = (string) $relay;
@@ -93,6 +97,7 @@ final class ConnectionManager implements NostrClientInterface
         }
     }
 
+    #[Override]
     public function reconnect(RelayUrl $relay): void
     {
         $connection = $this->connectionHandler->getConnection($relay);
@@ -102,6 +107,7 @@ final class ConnectionManager implements NostrClientInterface
         $this->connect($relay, $config);
     }
 
+    #[Override]
     public function subscribe(
         RelayUrl $relay,
         Filter $filter,
@@ -115,6 +121,7 @@ final class ConnectionManager implements NostrClientInterface
         return $subscriptionId;
     }
 
+    #[Override]
     public function subscribeMultiple(
         RelayUrl $relay,
         array $filters,
@@ -128,12 +135,14 @@ final class ConnectionManager implements NostrClientInterface
         return $subscriptionId;
     }
 
+    #[Override]
     public function unsubscribe(RelayUrl $relay, SubscriptionId $subscriptionId): void
     {
         $this->ensureConnected($relay);
         $this->connectionHandler->unsubscribe($relay, $subscriptionId);
     }
 
+    #[Override]
     public function publishEvent(RelayUrl $relay, Event $event): bool
     {
         $this->ensureConnected($relay);
@@ -141,11 +150,13 @@ final class ConnectionManager implements NostrClientInterface
         return $this->connectionHandler->publishEvent($relay, $event);
     }
 
+    #[Override]
     public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void
     {
         $this->connectionHandler->awaitPendingPublishes($relay, $timeoutSeconds);
     }
 
+    #[Override]
     public function isConnected(RelayUrl $relay): bool
     {
         $connection = $this->getConnection($relay);
@@ -153,12 +164,14 @@ final class ConnectionManager implements NostrClientInterface
         return null !== $connection && $connection->isHealthy();
     }
 
+    #[Override]
     public function getConnectedRelays(): RelayConnectionCollection
     {
         return $this->connectionHandler->getAllConnections()
             ->filter(static fn (RelayConnection $conn) => $conn->isHealthy());
     }
 
+    #[Override]
     public function getConnectionStatus(RelayUrl $relay): ConnectionState
     {
         $connection = $this->getConnection($relay);
@@ -166,6 +179,7 @@ final class ConnectionManager implements NostrClientInterface
         return $connection?->getState() ?? ConnectionState::DISCONNECTED;
     }
 
+    #[Override]
     public function close(): void
     {
         foreach ($this->getAllConnections() as $connection) {
@@ -173,6 +187,7 @@ final class ConnectionManager implements NostrClientInterface
         }
     }
 
+    #[Override]
     public function healthCheck(): HealthCheckResultCollection
     {
         $healthTasks = [];
@@ -197,16 +212,19 @@ final class ConnectionManager implements NostrClientInterface
         return new HealthCheckResultCollection($results);
     }
 
+    #[Override]
     public function getConnection(RelayUrl $relay): ?RelayConnection
     {
         return $this->connectionHandler->getConnection($relay);
     }
 
+    #[Override]
     public function getAllConnections(): RelayConnectionCollection
     {
         return $this->connectionHandler->getAllConnections();
     }
 
+    #[Override]
     public function ping(RelayUrl $relay): bool
     {
         $this->ensureConnected($relay);
@@ -224,8 +242,12 @@ final class ConnectionManager implements NostrClientInterface
     private function unsubscribeAll(RelayUrl $relay, RelayConnection $connection): void
     {
         foreach ($connection->getSubscriptions() as $subscriptionIdString => $_) {
+            $subscriptionId = SubscriptionId::fromString($subscriptionIdString);
+            if (null === $subscriptionId) {
+                continue;
+            }
             try {
-                $this->connectionHandler->unsubscribe($relay, SubscriptionId::fromString($subscriptionIdString));
+                $this->connectionHandler->unsubscribe($relay, $subscriptionId);
             } catch (Throwable $e) {
                 $this->logger->warning('Failed to unsubscribe during disconnect', [
                     'relay' => (string) $relay,

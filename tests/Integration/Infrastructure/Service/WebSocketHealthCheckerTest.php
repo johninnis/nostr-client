@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Service;
 
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
-use Innis\Nostr\Client\Infrastructure\Service\WebSocketHealthChecker;
+use Innis\Nostr\Client\Infrastructure\Connection\WebSocketHealthChecker;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 

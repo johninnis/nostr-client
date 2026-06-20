@@ -96,10 +96,10 @@ final class ConnectionFactory
 
     private static function createDefaultConnector(): Rfc6455Connector
     {
-        $httpClient = (new HttpClientBuilder())
+        $httpClient = new HttpClientBuilder()
             ->usingPool(
                 new UnlimitedConnectionPool(
-                    new DefaultConnectionFactory(connectContext: (new ConnectContext())->withTcpNoDelay())
+                    new DefaultConnectionFactory(connectContext: new ConnectContext()->withTcpNoDelay())
                 )
             )
             ->intercept(new class implements ApplicationInterceptor {

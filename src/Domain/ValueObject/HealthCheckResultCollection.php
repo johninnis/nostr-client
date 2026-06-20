@@ -8,6 +8,7 @@ use ArrayIterator;
 use Countable;
 use InvalidArgumentException;
 use IteratorAggregate;
+use Override;
 
 final readonly class HealthCheckResultCollection implements IteratorAggregate, Countable
 {
@@ -54,11 +55,13 @@ final readonly class HealthCheckResultCollection implements IteratorAggregate, C
         return $this->results;
     }
 
+    #[Override]
     public function getIterator(): ArrayIterator
     {
         return new ArrayIterator($this->results);
     }
 
+    #[Override]
     public function count(): int
     {
         return count($this->results);

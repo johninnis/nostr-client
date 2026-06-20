@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Tests\Unit\Infrastructure\Service;
+namespace Innis\Nostr\Client\Tests\Unit\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -13,7 +13,7 @@ use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
-use Innis\Nostr\Client\Infrastructure\Service\ConnectionManager;
+use Innis\Nostr\Client\Infrastructure\Connection\ConnectionManager;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Filter;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
@@ -206,6 +206,7 @@ final class ConnectionManagerTest extends TestCase
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $subscriptionId = SubscriptionId::fromString('test-sub');
+        self::assertNotNull($subscriptionId);
 
         $this->handlerConnections[(string) $this->relayUrl] = $connection;
 
@@ -571,10 +572,13 @@ final class ConnectionManagerTest extends TestCase
         $handler = $this->createHandlerStub();
         $manager = new ConnectionManager($handler);
 
+        $subscriptionId = SubscriptionId::fromString('sub-1');
+        self::assertNotNull($subscriptionId);
+
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $manager->unsubscribe($this->relayUrl, SubscriptionId::fromString('sub-1'));
+        $manager->unsubscribe($this->relayUrl, $subscriptionId);
     }
 
     public function testDisconnectOnUnknownRelayIsNoop(): void

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Infrastructure\Service;
+namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\TimeoutCancellation;
 use Innis\Nostr\Client\Domain\Service\RelayHealthCheckerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
-use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
@@ -24,6 +24,7 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
     ) {
     }
 
+    #[Override]
     public function checkHealth(RelayUrl $relayUrl, float $timeout = self::DEFAULT_TIMEOUT_SECONDS): HealthCheckResult
     {
         $startTime = microtime(true);

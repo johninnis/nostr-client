@@ -6,6 +6,7 @@ namespace Innis\Nostr\Client\Domain\Entity;
 
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Subscription;
 use Innis\Nostr\Core\Domain\Entity\SubscriptionCollection;
 use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
@@ -63,7 +64,7 @@ final class RelayConnection
         array $filters,
         SubscriptionState $initialState = SubscriptionState::PENDING,
     ): void {
-        $subscription = Subscription::create($subscriptionId, $filters);
+        $subscription = Subscription::create($subscriptionId, new FilterCollection($filters));
 
         if (SubscriptionState::PENDING !== $initialState) {
             $subscription = $subscription->withState($initialState);

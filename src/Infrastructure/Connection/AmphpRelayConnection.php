@@ -19,8 +19,9 @@ use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
-use Innis\Nostr\Core\Domain\Service\MessageSerialiserInterface;
+use Innis\Nostr\Core\Domain\Service\MessageDeserialiserInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\AuthMessage as ClientAuthMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
@@ -34,6 +35,7 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\OkMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use InvalidArgumentException;
+use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -58,16 +60,18 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
     public function __construct(
         private readonly ConnectionFactory $connectionFactory,
-        private readonly MessageSerialiserInterface $serialiser,
+        private readonly MessageDeserialiserInterface $deserialiser,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
+    #[Override]
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
     {
         $this->authHandler = $handler;
     }
 
+    #[Override]
     public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
     {
         $websocket = $this->getWebsocket($relayUrl);
@@ -80,6 +84,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $websocket->sendText($message->toJson());
     }
 
+    #[Override]
     public function connect(RelayUrl $relayUrl, ConnectionConfig $config): void
     {
         $urlString = (string) $relayUrl;
@@ -108,6 +113,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    #[Override]
     public function disconnect(RelayUrl $relayUrl): void
     {
         $urlString = (string) $relayUrl;
@@ -148,11 +154,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    #[Override]
     public function subscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId, Filter $filter, ?EventHandlerInterface $handler = null): void
     {
         $this->subscribeMultiple($relayUrl, $subscriptionId, [$filter], $handler);
     }
 
+    #[Override]
     public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, array $filters, ?EventHandlerInterface $handler = null): void
     {
         $websocket = $this->getWebsocket($relayUrl);
@@ -164,7 +172,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $this->subscriptionHandlers[$this->handlerKey($relayUrl, $subscriptionId)] = $handler;
         }
 
-        $message = new ReqMessage($subscriptionId, $filters);
+        $message = new ReqMessage($subscriptionId, new FilterCollection($filters));
 
         try {
             $websocket->sendText($message->toJson());
@@ -180,6 +188,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    #[Override]
     public function unsubscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId): void
     {
         try {
@@ -203,6 +212,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    #[Override]
     public function publishEvent(RelayUrl $relayUrl, Event $event): bool
     {
         $websocket = $this->getWebsocket($relayUrl);
@@ -219,6 +229,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         return true;
     }
 
+    #[Override]
     public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void
     {
         $urlString = (string) $relayUrl;
@@ -246,6 +257,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    #[Override]
     public function ping(RelayUrl $relayUrl): bool
     {
         $websocket = $this->getWebsocket($relayUrl);
@@ -255,6 +267,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         return true;
     }
 
+    #[Override]
     public function isConnected(RelayUrl $relayUrl): bool
     {
         $connection = $this->getConnection($relayUrl);
@@ -262,11 +275,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         return null !== $connection && $connection->isHealthy();
     }
 
+    #[Override]
     public function getConnection(RelayUrl $relayUrl): ?RelayConnection
     {
         return $this->connections[(string) $relayUrl] ?? null;
     }
 
+    #[Override]
     public function getAllConnections(): RelayConnectionCollection
     {
         return new RelayConnectionCollection(array_values($this->connections));
@@ -325,7 +340,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         try {
-            $message = $this->serialiser->deserialiseRelayMessage($jsonMessage);
+            $message = $this->deserialiser->deserialiseRelayMessage($jsonMessage);
 
             match (true) {
                 $message instanceof RelayEventMessage => $this->handleEventMessage($relayUrl, $message),
@@ -462,7 +477,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
             try {
                 $websocket = $this->getWebsocket($relayUrl);
-                $websocket->sendText((new EventMessage($event))->toJson());
+                $websocket->sendText(new EventMessage($event)->toJson());
             } catch (Throwable $e) {
                 unset($this->pendingResponses[$responseKey]);
                 $entry['deferred']->error(
@@ -556,12 +571,15 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 $websocket = $this->getWebsocket($relayUrl);
                 // Send a CLOSE for a non-existent subscription as a keep-alive response
                 // This is cheaper than a NOTICE and valid per Nostr protocol
-                $keepAliveMessage = new CloseMessage(SubscriptionId::fromString('keepalive'));
-                $websocket->sendText($keepAliveMessage->toJson());
+                $keepAliveSubscriptionId = SubscriptionId::fromString('keepalive');
+                if (null !== $keepAliveSubscriptionId) {
+                    $keepAliveMessage = new CloseMessage($keepAliveSubscriptionId);
+                    $websocket->sendText($keepAliveMessage->toJson());
 
-                $this->logger->debug('Responded to application-level ping', [
-                    'relay' => (string) $relayUrl,
-                ]);
+                    $this->logger->debug('Responded to application-level ping', [
+                        'relay' => (string) $relayUrl,
+                    ]);
+                }
             } catch (Throwable $e) {
                 $this->logger->warning('Failed to respond to application-level ping', [
                     'relay' => (string) $relayUrl,
@@ -629,6 +647,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             foreach ($activeSubscriptions as $subscriptionIdString => $_) {
                 try {
                     $subscriptionId = SubscriptionId::fromString($subscriptionIdString);
+                    if (null === $subscriptionId) {
+                        continue;
+                    }
                     $key = $this->handlerKey($relayUrl, $subscriptionId);
                     $handler = $this->subscriptionHandlers[$key] ?? null;
                     unset($this->subscriptionHandlers[$key]);

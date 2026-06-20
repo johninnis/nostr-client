@@ -24,7 +24,7 @@ A PHP client library for connecting to Nostr relays over WebSocket, subscribing 
 
 ## Requirements
 
-- PHP 8.3 or higher
+- PHP 8.4 or higher
 - `innis/nostr-core` - Core Nostr protocol entities
 - `amphp/amp` ^3.0 - Async runtime
 - `amphp/websocket-client` ^2.0 - WebSocket client
