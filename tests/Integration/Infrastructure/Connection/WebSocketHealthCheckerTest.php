@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Service;
+namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Infrastructure\Connection\WebSocketHealthChecker;
