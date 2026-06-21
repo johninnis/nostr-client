@@ -20,8 +20,8 @@ enum ConnectionState: string
     {
         return match ($this) {
             self::DISCONNECTED => self::CONNECTED === $target,
-            self::CONNECTED => in_array($target, [self::DISCONNECTING, self::FAILED], true),
-            self::DISCONNECTING => in_array($target, [self::DISCONNECTED, self::FAILED], true),
+            self::CONNECTED => self::DISCONNECTING === $target || self::FAILED === $target,
+            self::DISCONNECTING => self::DISCONNECTED === $target || self::FAILED === $target,
             self::FAILED => self::CONNECTED === $target,
         };
     }
