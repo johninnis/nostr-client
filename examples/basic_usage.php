@@ -63,7 +63,7 @@ $handler = new class implements EventHandlerInterface {
 };
 
 $filter = new Filter(
-    kinds: [EventKind::textNote()],
+    kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)],
     limit: 10
 );
 
