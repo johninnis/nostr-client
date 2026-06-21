@@ -10,8 +10,12 @@ use InvalidArgumentException;
 use IteratorAggregate;
 use Override;
 
+/**
+ * @implements IteratorAggregate<string, HealthCheckResult>
+ */
 final readonly class HealthCheckResultCollection implements IteratorAggregate, Countable
 {
+    /** @var array<string, HealthCheckResult> */
     private array $results;
 
     public function __construct(array $results = [])
@@ -55,6 +59,9 @@ final readonly class HealthCheckResultCollection implements IteratorAggregate, C
         return $this->results;
     }
 
+    /**
+     * @return ArrayIterator<string, HealthCheckResult>
+     */
     #[Override]
     public function getIterator(): ArrayIterator
     {

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\Cancellation;
-use Amp\Future;
 use Amp\Http\Client\ApplicationInterceptor;
 use Amp\Http\Client\Connection\DefaultConnectionFactory;
 use Amp\Http\Client\Connection\UnlimitedConnectionPool;
@@ -17,6 +16,7 @@ use Amp\Socket\ConnectContext;
 use Amp\Socket\TlsException;
 use Amp\Websocket\Client\Rfc6455ConnectionFactory;
 use Amp\Websocket\Client\Rfc6455Connector;
+use Amp\Websocket\Client\WebsocketConnection;
 use Amp\Websocket\Client\WebsocketConnector;
 use Amp\Websocket\Client\WebsocketHandshake;
 use Amp\Websocket\ConstantRateLimit;
@@ -44,9 +44,9 @@ final class ConnectionFactory
         $this->connector = $connector ?? self::createDefaultConnector();
     }
 
-    public function createConnection(RelayUrl $relayUrl, ConnectionConfig $config, ?Cancellation $cancellation = null): Future
+    public function createConnection(RelayUrl $relayUrl, ConnectionConfig $config, ?Cancellation $cancellation = null): WebsocketConnectionFuture
     {
-        return async(function () use ($relayUrl, $config, $cancellation) {
+        return new WebsocketConnectionFuture(async(function () use ($relayUrl, $config, $cancellation): WebsocketConnection {
             try {
                 $handshake = $this->createHandshake($relayUrl, $config);
 
@@ -58,7 +58,7 @@ final class ConnectionFactory
 
                 throw ConnectionException::forRelay($relayUrl, 'Failed to establish WebSocket connection', $e);
             }
-        });
+        }));
     }
 
     private function isTlsError(Throwable $e): bool

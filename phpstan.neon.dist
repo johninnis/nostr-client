@@ -15,13 +15,10 @@ parameters:
         # PHP cannot express generic type parameters natively (e.g. IteratorAggregate<int, Event>)
         -
             identifier: missingType.generics
-        # Amp async() resolves to mixed - PHP cannot express Future<T>, so awaited values lose their type at call sites
-        - '#Parameter .+ expects .+, mixed given#'
-        # Amp async() resolves to mixed - methods invoked on an awaited Future value cannot be type-checked
-        - '#Cannot call method .+\(\) on mixed#'
-        # Amp async() cannot bind its closure return to the Future template parameter - PHP cannot express Future<T> natively
+        # Amp awaitAll() over fire-and-forget Future<void> publishes cannot bind its template - PHP cannot express Future<T> natively
         -
             identifier: argument.templateType
+            path: src/Infrastructure/Connection
         # Test assertions that verify runtime behaviour are valid even when PHPStan can infer the result statically
         -
             identifier: method.alreadyNarrowedType

@@ -4,63 +4,37 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Domain\Entity;
 
-use ArrayIterator;
-use Countable;
-use InvalidArgumentException;
-use IteratorAggregate;
+use Innis\Nostr\Core\Domain\Collection\TypedCollection;
 use Override;
 
-final readonly class RelayConnectionCollection implements IteratorAggregate, Countable
+/**
+ * @extends TypedCollection<RelayConnection>
+ */
+final class RelayConnectionCollection extends TypedCollection
 {
-    private array $connections;
-
-    public function __construct(array $connections = [])
+    #[Override]
+    protected function elementType(): string
     {
-        foreach ($connections as $connection) {
-            if (!$connection instanceof RelayConnection) {
-                throw new InvalidArgumentException('All items must be RelayConnection instances');
-            }
-        }
-        $this->connections = array_values($connections);
+        return RelayConnection::class;
     }
 
     public function add(RelayConnection $connection): self
     {
-        $connections = $this->connections;
-        $connections[] = $connection;
-
-        return new self($connections);
+        return new self([...$this->items, $connection]);
     }
 
     public function filter(callable $predicate): self
     {
-        return new self(array_filter($this->connections, $predicate));
+        return new self(array_filter($this->items, $predicate));
     }
 
     public function map(callable $callback): array
     {
-        return array_map($callback, $this->connections);
-    }
-
-    public function isEmpty(): bool
-    {
-        return empty($this->connections);
+        return array_map($callback, $this->items);
     }
 
     public function toArray(): array
     {
-        return $this->connections;
-    }
-
-    #[Override]
-    public function getIterator(): ArrayIterator
-    {
-        return new ArrayIterator($this->connections);
-    }
-
-    #[Override]
-    public function count(): int
-    {
-        return count($this->connections);
+        return $this->items;
     }
 }
