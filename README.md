@@ -165,7 +165,11 @@ See [`examples/`](examples/) for complete working examples.
 
 ## Error Handling
 
-The client throws on failure. Retry logic belongs in your application layer where you have full business context.
+Failures split into two kinds. Anticipated domain outcomes (a well-formed operation whose answer is "no") are **returned** as typed values (`?T` or a `*Failure`), never thrown, so the caller is statically forced to handle them. Only **faults** — violated invariants, programmer errors, and infrastructure failures — are thrown.
+
+Faults are rooted by whose code raises them, not by the dependency graph. Nostr library code — including nostr-client — roots its faults at `NostrException` (defined in nostr-core): `ClientException` (abstract) extends `NostrException`, and `ConnectionException` (final) extends `ClientException`. A consumer application that depends on nostr-client roots its **own** faults at its own independent base — for example, Hubstr code throws a `HubstrException` (extending `\Exception`), which does **not** extend `NostrException` even though Hubstr depends on the Nostr libraries. What decides the root is whose code raises the fault.
+
+Retry logic belongs in your application layer where you have full business context.
 
 ```php
 try {
