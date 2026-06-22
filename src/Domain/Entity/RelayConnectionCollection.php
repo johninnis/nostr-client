@@ -32,9 +32,4 @@ final class RelayConnectionCollection extends TypedCollection
     {
         return array_map($callback, $this->items);
     }
-
-    public function toArray(): array
-    {
-        return $this->items;
-    }
 }
