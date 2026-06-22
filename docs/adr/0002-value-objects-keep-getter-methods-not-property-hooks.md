@@ -1,4 +1,4 @@
-# 2. Value objects keep `getX()` methods, not property hooks
+# 2. Value objects expose state through `getX()` accessors, not public properties or hooks
 
 ## Status
 
@@ -6,34 +6,24 @@ Accepted
 
 ## Context
 
-PHP 8.4 property hooks and asymmetric visibility (`public private(set)`) let a *property* carry the
-computation and write-control that previously needed a `getX()` / `setX()` method, so the idiomatic 8.4
-move is usually to expose a property and drop the accessor. Applied to this package's value objects
-(`HealthCheckResult`, `ConnectionConfig`, `HealthCheckResultCollection`) and to the lifecycle state of
-the `RelayConnection` entity, that would replace each `getX()` with a bare or hooked property.
+PHP 8.4 makes it idiomatic to drop an accessor and expose state directly: a `public readonly` property for a plain carrier, or a property hook for a computed or write-controlled one. Applied to this package's value objects, that move would replace each `getX()` method with a public property, and a reviewer reaching for the modern idiom will be tempted to make exactly that change.
 
 ## Decision
 
-Value objects keep `getX()` methods. Property hooks and asymmetric visibility are not used to replace
-getters.
+Every value object and DTO exposes its state through `getX()` (or `toX()`) accessors over private properties. No public readonly state, no property hooks, no asymmetric visibility (`public private(set)`). The surface is uniform.
 
-1. **`readonly` forbids hooks.** A property hook requires a non-readonly property, and a
-   `final readonly class` makes every property readonly — so inside these value objects a hook is not
-   available at all. The language gives an immutable object exactly one tool for a read, and it is a
-   method.
-2. **A partial migration is worse than none.** A nullable, interface-shaped accessor such as
-   `HealthCheckResult::getLatencyMs(): ?float` reads naturally as a method; converting only the trivial
-   pass-throughs would split the public API into two access styles (a bare property next to a `getX()`
-   call). A uniform `getX()` surface is the only internally consistent option.
-3. **No behavioural or type-safety gain.** Getter-to-property is purely syntactic: it would rewrite call
-   sites for no change in behaviour or analyser coverage.
+The decision is about keeping one stable, uniform surface — not about what the language happens to permit:
+
+1. **A `getX()` accessor is a stable surface; a public property is not.** Binding an accessor to an interface, normalising its representation, or computing it on read later is a non-event behind `getX()` — no call site changes. The same change behind a public property is a breaking change to every reader. The accessor is the seam that keeps those future moves cheap and invisible, and they are not hypothetical: identity-bound, normalised, and computed reads already exist across these value objects.
+
+2. **Some reads can only be methods, so a uniform surface means all reads are methods.** A value computed or normalised on read, or bound to an interface, is not a stored property and cannot be a bare `public` field; and a `final readonly class` cannot carry a property hook at all, because a hook requires a non-readonly property. Those accessors are therefore methods no matter what. Exposing only the *plain* carriers as public properties would split the surface into two access styles — a bare `$vo->size` beside a `$vo->getHash()` call — for every reader and call site to navigate. One `getX()` style is the only internally consistent surface.
+
+3. **The conversion is purely syntactic and buys nothing.** Replacing `getX()` with a property changes no behaviour and gives the analyser nothing it did not already have. It trades a uniform surface for a split one and rewrites call sites for no gain.
+
+Collections differ in *shape*, not in principle: a typed collection exposes the iterable and countable surface (`IteratorAggregate`/`Countable`) plus `toArray()`/`contains()`, rather than a `getItems()` accessor.
 
 ## Consequences
 
-- The value-object surface is uniformly `getX()`; the `RelayConnection` entity's lifecycle state likewise
-  stays behind a `getX()` method, mutated through named transformations rather than a publicly-readable
-  `private(set)` property.
-- Setters do not arise. Value objects are immutable and transform by returning a new instance; the
-  `RelayConnection` entity mutates only through named transformations.
-- Do not "modernise" individual getters into property hooks — it is unavailable on readonly properties
-  and would fracture the access style.
+- The value-object surface is uniformly `getX()`/`toX()`. Entity lifecycle state likewise stays behind a `getX()` method, mutated through named transformations that return a new instance — never a publicly-readable `private(set)` property.
+- Setters do not arise: value objects are immutable and transform by returning a new instance.
+- Do not "modernise" a `getX()` accessor into a public property or a hook. It fractures the access style, and turns a future interface-binding or computed read from a non-event into a breaking change across every call site.
