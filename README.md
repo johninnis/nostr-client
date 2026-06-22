@@ -167,7 +167,7 @@ See [`examples/`](examples/) for complete working examples.
 
 Failures split into two kinds. Anticipated domain outcomes (a well-formed operation whose answer is "no") are **returned** as typed values (`?T` or a `*Failure`), never thrown, so the caller is statically forced to handle them. Only **faults** — violated invariants, programmer errors, and infrastructure failures — are thrown.
 
-Faults are rooted by whose code raises them, not by the dependency graph. Nostr library code — including nostr-client — roots its faults at `NostrException` (defined in nostr-core): `ClientException` (abstract) extends `NostrException`, and `ConnectionException` (final) extends `ClientException`. A consumer application that depends on nostr-client roots its **own** faults at its own independent base — for example, Hubstr code throws a `HubstrException` (extending `\Exception`), which does **not** extend `NostrException` even though Hubstr depends on the Nostr libraries. What decides the root is whose code raises the fault.
+nostr-client's faults are `ClientException` (abstract) extending `NostrException`, with `ConnectionException` (final) extending `ClientException`. A consumer application that depends on nostr-client roots its **own** faults at its own independent base, not under `NostrException`. The rationale for rooting faults by whose code raises them rather than by the dependency graph is recorded in [ADR-0001](docs/adr/0001-clientexception-roots-nostr-client-faults-under-nostrexception.md).
 
 Retry logic belongs in your application layer where you have full business context.
 
@@ -230,18 +230,6 @@ composer analyse
 # Fix code style
 composer fix-style
 ```
-
----
-
-## Why value objects use getX() methods, not property hooks
-
-PHP 8.4 property hooks let a property carry a computed read, so the idiomatic move is often to expose a property and drop the accessor. This library deliberately keeps `getX()` methods on its value objects:
-
-1. **`readonly` forbids hooks.** A property hook requires a non-readonly property, and a `final readonly class` makes every property readonly — so a hook is not available inside these value objects at all. A value computed on read can only be a method.
-2. **A partial migration is worse than none.** Computed and interface-bound accessors must stay methods, so converting only the trivial pass-throughs would split the public API into two access styles (a bare property next to a `getX()` call). A uniform `getX()` surface is the only internally consistent option.
-3. **No behavioural or type-safety gain.** Getter-to-property is purely syntactic: it would rewrite call sites for no change in behaviour or analyser coverage.
-
-Setters do not arise: value objects are immutable and transform by returning a new instance.
 
 ---
 
