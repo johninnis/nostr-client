@@ -18,18 +18,8 @@ final class RelayConnectionCollection extends TypedCollection
         return RelayConnection::class;
     }
 
-    public function add(RelayConnection $connection): self
-    {
-        return new self([...$this->items, $connection]);
-    }
-
     public function filter(callable $predicate): self
     {
         return new self(array_filter($this->items, $predicate));
-    }
-
-    public function map(callable $callback): array
-    {
-        return array_map($callback, $this->items);
     }
 }

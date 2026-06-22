@@ -336,9 +336,9 @@ final class ConnectionManagerTest extends TestCase
         $manager->publishEvent($this->relayUrl, $event);
     }
 
-    public function testPublishEvent(): void
+    public function testPublishEventDelegatesToHandlerWhenConnected(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
@@ -347,11 +347,11 @@ final class ConnectionManagerTest extends TestCase
         $event = EventFactory::createTextNote($pubkey, 'Test event content');
 
         $handler
+            ->expects($this->once())
             ->method('publishEvent')
-            ->willReturn(true);
+            ->with($this->relayUrl, $event);
 
-        $result = $manager->publishEvent($this->relayUrl, $event);
-        $this->assertTrue($result);
+        $manager->publishEvent($this->relayUrl, $event);
     }
 
     public function testGetConnectedRelays(): void

@@ -49,6 +49,9 @@ use function Amp\weakClosure;
 
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
+    private const string APPLICATION_PING_NOTICE = 'ping';
+    private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
+
     private ?AuthChallengeHandlerInterface $authHandler = null;
     private ?ReconnectionListenerInterface $reconnectionListener = null;
     private array $connections = [];
@@ -221,7 +224,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     }
 
     #[Override]
-    public function publishEvent(RelayUrl $relayUrl, Event $event): bool
+    public function publishEvent(RelayUrl $relayUrl, Event $event): void
     {
         $websocket = $this->getWebsocket($relayUrl);
         $eventKey = (string) $relayUrl.':'.$event->getId()->toHex();
@@ -233,8 +236,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         $message = new EventMessage($event);
         $websocket->sendText($message->toJson());
-
-        return true;
     }
 
     #[Override]
@@ -421,10 +422,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             unset($this->pendingResponses[$responseKey]);
 
             if ($message->isAccepted()) {
+                unset($this->pendingEvents[$responseKey]);
                 $future->complete(true);
             } elseif ($message->isAuthRequired()) {
                 $this->queueAuthRetry($relayUrl, $eventIdHex, $future);
             } else {
+                unset($this->pendingEvents[$responseKey]);
                 $future->error(
                     ConnectionException::forRelay($relayUrl, 'Event rejected: '.$message->getMessage())
                 );
@@ -495,7 +498,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 $websocket = $this->getWebsocket($relayUrl);
                 $websocket->sendText(new EventMessage($event)->toJson());
             } catch (Throwable $e) {
-                unset($this->pendingResponses[$responseKey]);
+                unset($this->pendingResponses[$responseKey], $this->pendingEvents[$eventKey]);
                 $entry['deferred']->error(
                     ConnectionException::forRelay($relayUrl, 'Auth retry failed: '.$e->getMessage())
                 );
@@ -510,6 +513,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         unset($this->authRetryQueue[$urlString]);
 
         foreach ($queue as $entry) {
+            unset($this->pendingEvents[$urlString.':'.$entry['event_id_hex']]);
             $entry['deferred']->error(
                 ConnectionException::forRelay($relayUrl, 'Auth failed: '.$reason)
             );
@@ -580,28 +584,8 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             'notice' => $notice,
         ]);
 
-        // Some relays (like relay.ditto.pub) use application-level ping via NOTICE
-        // They expect ANY message back within a timeout to prove the client is alive
-        if ('ping' === strtolower(trim($notice))) {
-            try {
-                $websocket = $this->getWebsocket($relayUrl);
-                // Send a CLOSE for a non-existent subscription as a keep-alive response
-                // This is cheaper than a NOTICE and valid per Nostr protocol
-                $keepAliveSubscriptionId = SubscriptionId::fromString('keepalive');
-                if (null !== $keepAliveSubscriptionId) {
-                    $keepAliveMessage = new CloseMessage($keepAliveSubscriptionId);
-                    $websocket->sendText($keepAliveMessage->toJson());
-
-                    $this->logger->debug('Responded to application-level ping', [
-                        'relay' => (string) $relayUrl,
-                    ]);
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('Failed to respond to application-level ping', [
-                    'relay' => (string) $relayUrl,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        if (self::APPLICATION_PING_NOTICE === strtolower(trim($notice))) {
+            $this->respondToApplicationPing($relayUrl);
 
             return;
         }
@@ -611,6 +595,30 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             if (str_starts_with($key, $prefix)) {
                 $handler->handleNotice($relayUrl, $notice);
             }
+        }
+    }
+
+    // Deliberate: keep-alive reply via CLOSE for a throwaway subscription - see ADR-0003
+    private function respondToApplicationPing(RelayUrl $relayUrl): void
+    {
+        $keepAliveSubscriptionId = SubscriptionId::fromString(self::KEEP_ALIVE_SUBSCRIPTION_ID);
+
+        if (null === $keepAliveSubscriptionId) {
+            return;
+        }
+
+        try {
+            $websocket = $this->getWebsocket($relayUrl);
+            $websocket->sendText(new CloseMessage($keepAliveSubscriptionId)->toJson());
+
+            $this->logger->debug('Responded to application-level ping', [
+                'relay' => (string) $relayUrl,
+            ]);
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to respond to application-level ping', [
+                'relay' => (string) $relayUrl,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

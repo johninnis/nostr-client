@@ -151,11 +151,11 @@ final class ConnectionManager implements NostrClientInterface
     }
 
     #[Override]
-    public function publishEvent(RelayUrl $relay, Event $event): bool
+    public function publishEvent(RelayUrl $relay, Event $event): void
     {
         $this->ensureConnected($relay);
 
-        return $this->connectionHandler->publishEvent($relay, $event);
+        $this->connectionHandler->publishEvent($relay, $event);
     }
 
     #[Override]

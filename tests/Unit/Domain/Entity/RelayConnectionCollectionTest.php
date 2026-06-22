@@ -43,17 +43,6 @@ final class RelayConnectionCollectionTest extends TestCase
         new RelayConnectionCollection(['not-a-connection']);
     }
 
-    public function testAddReturnsNewCollection(): void
-    {
-        $collection = new RelayConnectionCollection();
-
-        $newCollection = $collection->add($this->connection);
-
-        $this->assertTrue($collection->isEmpty());
-        $this->assertSame(1, $newCollection->count());
-        $this->assertSame($this->connection, $newCollection->toArray()[0]);
-    }
-
     public function testFilter(): void
     {
         $healthy = $this->connection;
@@ -71,16 +60,6 @@ final class RelayConnectionCollectionTest extends TestCase
         $this->assertSame(2, $collection->count());
         $this->assertSame(1, $filtered->count());
         $this->assertSame($healthy, $filtered->toArray()[0]);
-    }
-
-    public function testMap(): void
-    {
-        $collection = new RelayConnectionCollection([$this->connection]);
-
-        $urls = $collection->map(static fn (RelayConnection $c) => $c->getRelayUrl());
-
-        $this->assertCount(1, $urls);
-        $this->assertTrue($this->connection->getRelayUrl()->equals($urls[0]));
     }
 
     public function testIteration(): void

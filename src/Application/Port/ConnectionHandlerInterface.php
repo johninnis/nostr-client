@@ -34,7 +34,7 @@ interface ConnectionHandlerInterface
 
     public function unsubscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId): void;
 
-    public function publishEvent(RelayUrl $relayUrl, Event $event): bool;
+    public function publishEvent(RelayUrl $relayUrl, Event $event): void;
 
     public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void;
 

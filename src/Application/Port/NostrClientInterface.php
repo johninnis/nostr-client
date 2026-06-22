@@ -30,7 +30,7 @@ interface NostrClientInterface
 
     public function reconnect(RelayUrl $relay): void;
 
-    public function publishEvent(RelayUrl $relay, Event $event): bool;
+    public function publishEvent(RelayUrl $relay, Event $event): void;
 
     public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void;
 
