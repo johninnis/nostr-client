@@ -22,13 +22,10 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(500, $config->getReconnectInitialDelayMs());
         $this->assertSame(60000, $config->getReconnectMaxDelayMs());
         $this->assertSame(0, $config->getReconnectMaxAttempts());
-        $this->assertNull($config->getOnReconnected());
     }
 
     public function testConstructorWithCustomValues(): void
     {
-        $callback = static function (): void {};
-
         $config = new ConnectionConfig(
             connectionTimeoutSeconds: 30,
             headers: ['X-Custom' => 'value'],
@@ -37,7 +34,6 @@ final class ConnectionConfigTest extends TestCase
             reconnectInitialDelayMs: 100,
             reconnectMaxDelayMs: 5000,
             reconnectMaxAttempts: 5,
-            onReconnected: $callback,
         );
 
         $this->assertSame(30, $config->getConnectionTimeoutSeconds());
@@ -47,7 +43,6 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(100, $config->getReconnectInitialDelayMs());
         $this->assertSame(5000, $config->getReconnectMaxDelayMs());
         $this->assertSame(5, $config->getReconnectMaxAttempts());
-        $this->assertSame($callback, $config->getOnReconnected());
     }
 
     #[DataProvider('invalidValueProvider')]
@@ -149,25 +144,5 @@ final class ConnectionConfigTest extends TestCase
 
         $this->assertSame(0, $original->getReconnectMaxAttempts());
         $this->assertSame(3, $modified->getReconnectMaxAttempts());
-    }
-
-    public function testWithOnReconnected(): void
-    {
-        $original = new ConnectionConfig();
-        $callback = static function (): void {};
-        $modified = $original->withOnReconnected($callback);
-
-        $this->assertNull($original->getOnReconnected());
-        $this->assertSame($callback, $modified->getOnReconnected());
-    }
-
-    public function testWithOnReconnectedAcceptsNullToClear(): void
-    {
-        $callback = static function (): void {};
-        $original = (new ConnectionConfig())->withOnReconnected($callback);
-        $modified = $original->withOnReconnected(null);
-
-        $this->assertSame($callback, $original->getOnReconnected());
-        $this->assertNull($modified->getOnReconnected());
     }
 }

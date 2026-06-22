@@ -17,7 +17,6 @@ use InvalidArgumentException;
 final class RelayConnection
 {
     private SubscriptionCollection $subscriptions;
-    private ?float $connectedAt = null;
 
     public function __construct(
         private readonly RelayUrl $relayUrl,
@@ -25,10 +24,6 @@ final class RelayConnection
         private readonly ConnectionConfig $config,
     ) {
         $this->subscriptions = SubscriptionCollection::empty();
-
-        if ($state->isConnected()) {
-            $this->connectedAt = microtime(true);
-        }
     }
 
     public function getRelayUrl(): RelayUrl
@@ -48,10 +43,6 @@ final class RelayConnection
         }
 
         $this->state = $state;
-
-        if ($state->isConnected()) {
-            $this->connectedAt = microtime(true);
-        }
     }
 
     public function getConfig(): ConnectionConfig
@@ -61,10 +52,10 @@ final class RelayConnection
 
     public function addSubscription(
         SubscriptionId $subscriptionId,
-        array $filters,
+        FilterCollection $filters,
         SubscriptionState $initialState = SubscriptionState::PENDING,
     ): void {
-        $subscription = Subscription::create($subscriptionId, new FilterCollection($filters));
+        $subscription = Subscription::create($subscriptionId, $filters);
 
         if (SubscriptionState::PENDING !== $initialState) {
             $subscription = $subscription->withState($initialState);
@@ -114,14 +105,8 @@ final class RelayConnection
         return count($this->subscriptions);
     }
 
-    public function getConnectedAt(): ?float
-    {
-        return $this->connectedAt;
-    }
-
     public function isHealthy(): bool
     {
-        return $this->state->isConnected()
-            && null !== $this->connectedAt;
+        return $this->state->isConnected();
     }
 }

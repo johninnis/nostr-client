@@ -6,11 +6,21 @@ namespace Innis\Nostr\Client\Tests\Unit\Domain\ValueObject;
 
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 final class HealthCheckResultCollectionTest extends TestCase
 {
+    private RelayUrl $relayUrl;
+
+    protected function setUp(): void
+    {
+        $relayUrl = RelayUrl::fromString('wss://relay.example.com');
+        self::assertNotNull($relayUrl);
+        $this->relayUrl = $relayUrl;
+    }
+
     public function testEmptyCollection(): void
     {
         $collection = new HealthCheckResultCollection();
@@ -20,57 +30,36 @@ final class HealthCheckResultCollectionTest extends TestCase
         $this->assertSame([], $collection->toArray());
     }
 
-    public function testConstructorValidatesValues(): void
+    public function testConstructorValidatesElementType(): void
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new HealthCheckResultCollection(['wss://relay.example.com' => 'not-a-result']);
+        new HealthCheckResultCollection(['not-a-result']);
     }
 
-    public function testConstructorValidatesKeys(): void
+    public function testHoldsResults(): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $result = HealthCheckResult::success($this->relayUrl, 42.5);
+        $collection = new HealthCheckResultCollection([$result]);
 
-        new HealthCheckResultCollection([0 => HealthCheckResult::success(10.0)]);
-    }
-
-    public function testAddReturnsNewCollection(): void
-    {
-        $collection = new HealthCheckResultCollection();
-        $result = HealthCheckResult::success(42.5);
-
-        $newCollection = $collection->add('wss://relay.example.com', $result);
-
-        $this->assertTrue($collection->isEmpty());
-        $this->assertSame(1, $newCollection->count());
-    }
-
-    public function testGetAndHas(): void
-    {
-        $result = HealthCheckResult::success(42.5);
-        $collection = new HealthCheckResultCollection(['wss://relay.example.com' => $result]);
-
-        $this->assertTrue($collection->has('wss://relay.example.com'));
-        $this->assertFalse($collection->has('wss://unknown.com'));
-        $this->assertSame($result, $collection->get('wss://relay.example.com'));
-        $this->assertNull($collection->get('wss://unknown.com'));
+        $this->assertSame(1, $collection->count());
+        $this->assertSame($result, $collection->toArray()[0]);
     }
 
     public function testIteration(): void
     {
-        $success = HealthCheckResult::success(10.0);
-        $failure = HealthCheckResult::failure('Connection refused');
-        $collection = new HealthCheckResultCollection([
-            'wss://relay1.example.com' => $success,
-            'wss://relay2.example.com' => $failure,
-        ]);
+        $relay2 = RelayUrl::fromString('wss://relay2.example.com');
+        self::assertNotNull($relay2);
+        $success = HealthCheckResult::success($this->relayUrl, 10.0);
+        $failure = HealthCheckResult::failure($relay2, 'Connection refused');
+        $collection = new HealthCheckResultCollection([$success, $failure]);
 
         $items = [];
-        foreach ($collection as $key => $value) {
-            $items[$key] = $value;
+        foreach ($collection as $result) {
+            $items[(string) $result->getRelayUrl()] = $result;
         }
 
-        $this->assertSame($success, $items['wss://relay1.example.com']);
+        $this->assertSame($success, $items['wss://relay.example.com']);
         $this->assertSame($failure, $items['wss://relay2.example.com']);
     }
 }

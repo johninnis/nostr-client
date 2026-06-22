@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Domain\ValueObject;
 
-use Closure;
 use InvalidArgumentException;
 
 final readonly class ConnectionConfig
@@ -17,7 +16,6 @@ final readonly class ConnectionConfig
         private int $reconnectInitialDelayMs = 500,
         private int $reconnectMaxDelayMs = 60000,
         private int $reconnectMaxAttempts = 0,
-        private ?Closure $onReconnected = null,
     ) {
         if ($connectionTimeoutSeconds <= 0) {
             throw new InvalidArgumentException('Connection timeout must be positive');
@@ -71,11 +69,6 @@ final readonly class ConnectionConfig
         return $this->reconnectMaxAttempts;
     }
 
-    public function getOnReconnected(): ?Closure
-    {
-        return $this->onReconnected;
-    }
-
     public function withConnectionTimeout(int $seconds): self
     {
         return new self(
@@ -86,7 +79,6 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
-            $this->onReconnected,
         );
     }
 
@@ -100,7 +92,6 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
-            $this->onReconnected,
         );
     }
 
@@ -114,7 +105,6 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
-            $this->onReconnected,
         );
     }
 
@@ -128,7 +118,6 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
-            $this->onReconnected,
         );
     }
 
@@ -142,7 +131,6 @@ final readonly class ConnectionConfig
             $initialMs,
             $maxMs,
             $this->reconnectMaxAttempts,
-            $this->onReconnected,
         );
     }
 
@@ -156,21 +144,6 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $maxAttempts,
-            $this->onReconnected,
-        );
-    }
-
-    public function withOnReconnected(?Closure $onReconnected): self
-    {
-        return new self(
-            $this->connectionTimeoutSeconds,
-            $this->headers,
-            $this->userAgent,
-            $this->autoReconnect,
-            $this->reconnectInitialDelayMs,
-            $this->reconnectMaxDelayMs,
-            $this->reconnectMaxAttempts,
-            $onReconnected,
         );
     }
 }

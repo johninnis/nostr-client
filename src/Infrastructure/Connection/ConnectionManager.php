@@ -11,12 +11,14 @@ use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use Override;
@@ -41,6 +43,12 @@ final class ConnectionManager implements NostrClientInterface
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
     {
         $this->connectionHandler->setAuthHandler($handler);
+    }
+
+    #[Override]
+    public function setReconnectionListener(ReconnectionListenerInterface $listener): void
+    {
+        $this->connectionHandler->setReconnectionListener($listener);
     }
 
     #[Override]
@@ -124,7 +132,7 @@ final class ConnectionManager implements NostrClientInterface
     #[Override]
     public function subscribeMultiple(
         RelayUrl $relay,
-        array $filters,
+        FilterCollection $filters,
         EventHandlerInterface $handler,
         ?SubscriptionId $subscriptionId = null,
     ): SubscriptionId {
@@ -194,15 +202,15 @@ final class ConnectionManager implements NostrClientInterface
 
         foreach ($this->connectionHandler->getAllConnections() as $connection) {
             $relayUrl = $connection->getRelayUrl();
-            $healthTasks[(string) $relayUrl] = async(function () use ($relayUrl) {
+            $healthTasks[] = async(function () use ($relayUrl) {
                 $startTime = microtime(true);
                 try {
                     $this->ping($relayUrl);
                     $latencyMs = (microtime(true) - $startTime) * 1000;
 
-                    return HealthCheckResult::success($latencyMs);
+                    return HealthCheckResult::success($relayUrl, $latencyMs);
                 } catch (Throwable $e) {
-                    return HealthCheckResult::failure($e->getMessage());
+                    return HealthCheckResult::failure($relayUrl, $e->getMessage());
                 }
             });
         }

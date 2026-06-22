@@ -45,7 +45,7 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
                 'latency_ms' => round($latencyMs, 2),
             ]);
 
-            return HealthCheckResult::success($latencyMs);
+            return HealthCheckResult::success($relayUrl, $latencyMs);
         } catch (Throwable $e) {
             $errorMessage = $e->getMessage();
 
@@ -55,7 +55,7 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
                 'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             ]);
 
-            return HealthCheckResult::failure($errorMessage);
+            return HealthCheckResult::failure($relayUrl, $errorMessage);
         }
     }
 }

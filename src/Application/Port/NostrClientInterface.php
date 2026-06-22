@@ -8,17 +8,21 @@ use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
 interface NostrClientInterface
 {
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void;
+
+    public function setReconnectionListener(ReconnectionListenerInterface $listener): void;
 
     public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): void;
 
@@ -39,7 +43,7 @@ interface NostrClientInterface
 
     public function subscribeMultiple(
         RelayUrl $relay,
-        array $filters,
+        FilterCollection $filters,
         EventHandlerInterface $handler,
         ?SubscriptionId $subscriptionId = null,
     ): SubscriptionId;

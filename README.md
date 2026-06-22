@@ -69,7 +69,7 @@ $handler = new class implements EventHandlerInterface {
     public function handleNotice(RelayUrl $relayUrl, string $message): void {}
 };
 
-$filter = new Filter(kinds: [EventKind::textNote()], limit: 10);
+$filter = new Filter(kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)], limit: 10);
 $relay = RelayUrl::fromString('wss://relay.damus.io');
 
 $subscriptionId = $client->subscribe($relay, $filter, $handler);
@@ -98,7 +98,8 @@ $client->publishEvent($relay, $signedEvent);
 ```php
 $results = $client->healthCheck();
 
-foreach ($results as $relayUrl => $result) {
+foreach ($results as $result) {
+    $relayUrl = $result->getRelayUrl();
     if ($result->isHealthy()) {
         echo "{$relayUrl}: {$result->getLatencyMs()}ms\n";
     } else {
@@ -110,12 +111,14 @@ foreach ($results as $relayUrl => $result) {
 ### Multiple Filters Per Subscription
 
 ```php
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
+
 $subscriptionId = $client->subscribeMultiple(
     $relay,
-    [
-        new Filter(kinds: [EventKind::textNote()], limit: 10),
-        new Filter(kinds: [EventKind::reaction()], limit: 10),
-    ],
+    new FilterCollection([
+        new Filter(kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)], limit: 10),
+        new Filter(kinds: [EventKind::fromInt(EventKind::REACTION)], limit: 10),
+    ]),
     $handler,
 );
 ```
@@ -208,8 +211,8 @@ src/
     Connection/AmphpRelayConnection  WebSocket connection handler (AMPHP)
     Connection/ConnectionFactory     WebSocket connection creation
     Connection/ActiveWebSocket       Active WebSocket holder
-    Service/ConnectionManager        Implements NostrClientInterface
-    Service/WebSocketHealthChecker   Standalone relay health checker
+    Connection/ConnectionManager     Implements NostrClientInterface
+    Connection/WebSocketHealthChecker  Standalone relay health checker
     Factory/NostrClientFactory       Dependency wiring
 ```
 

@@ -7,16 +7,20 @@ namespace Innis\Nostr\Client\Application\Port;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Entity\Filter;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
 interface ConnectionHandlerInterface
 {
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void;
+
+    public function setReconnectionListener(ReconnectionListenerInterface $listener): void;
 
     public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void;
 
@@ -26,7 +30,7 @@ interface ConnectionHandlerInterface
 
     public function subscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId, Filter $filter, ?EventHandlerInterface $handler = null): void;
 
-    public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, array $filters, ?EventHandlerInterface $handler = null): void;
+    public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, FilterCollection $filters, ?EventHandlerInterface $handler = null): void;
 
     public function unsubscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId): void;
 

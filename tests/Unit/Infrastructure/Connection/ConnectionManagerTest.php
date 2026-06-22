@@ -10,12 +10,14 @@ use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionManager;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Filter;
+use Innis\Nostr\Core\Domain\Entity\FilterCollection;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
@@ -213,7 +215,7 @@ final class ConnectionManagerTest extends TestCase
         $handler
             ->method('subscribe')
             ->willReturnCallback(static function () use ($connection, $subscriptionId): void {
-                $connection->addSubscription($subscriptionId, [new Filter()]);
+                $connection->addSubscription($subscriptionId, new FilterCollection([new Filter()]));
             });
 
         $eventHandler = $this->createStub(EventHandlerInterface::class);
@@ -460,6 +462,20 @@ final class ConnectionManagerTest extends TestCase
         $manager->setAuthHandler($authHandler);
     }
 
+    public function testSetReconnectionListenerDelegatesToConnectionHandler(): void
+    {
+        $handler = $this->createHandlerMock();
+        $manager = new ConnectionManager($handler);
+        $listener = $this->createStub(ReconnectionListenerInterface::class);
+
+        $handler
+            ->expects($this->once())
+            ->method('setReconnectionListener')
+            ->with($listener);
+
+        $manager->setReconnectionListener($listener);
+    }
+
     public function testPingDelegatesToConnectionHandler(): void
     {
         $handler = $this->createHandlerMock();
@@ -544,7 +560,7 @@ final class ConnectionManagerTest extends TestCase
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
 
-        $manager->subscribeMultiple($this->relayUrl, [new Filter()], $eventHandler);
+        $manager->subscribeMultiple($this->relayUrl, new FilterCollection([new Filter()]), $eventHandler);
     }
 
     public function testSubscribeMultipleDelegatesToHandler(): void
@@ -553,7 +569,7 @@ final class ConnectionManagerTest extends TestCase
         $manager = new ConnectionManager($handler);
         $this->establishConnection();
 
-        $filters = [new Filter(), new Filter()];
+        $filters = new FilterCollection([new Filter(), new Filter()]);
         $eventHandler = $this->createStub(EventHandlerInterface::class);
         $explicitId = SubscriptionId::fromString('multi-sub');
 

@@ -51,34 +51,4 @@ final class ConnectionExceptionTest extends TestCase
         $this->assertSame($this->relayUrl, $exception->getRelayUrl());
         $this->assertSame($previous, $exception->getPrevious());
     }
-
-    public function testTimeout(): void
-    {
-        $exception = ConnectionException::timeout($this->relayUrl, 30);
-
-        $this->assertStringContainsString('Connection timeout after 30s', $exception->getMessage());
-        $this->assertStringContainsString('wss://relay.example.com', $exception->getMessage());
-        $this->assertSame(408, $exception->getCode());
-        $this->assertSame($this->relayUrl, $exception->getRelayUrl());
-    }
-
-    public function testRefused(): void
-    {
-        $exception = ConnectionException::refused($this->relayUrl);
-
-        $this->assertStringContainsString('Connection refused by relay', $exception->getMessage());
-        $this->assertStringContainsString('wss://relay.example.com', $exception->getMessage());
-        $this->assertSame(61, $exception->getCode());
-        $this->assertSame($this->relayUrl, $exception->getRelayUrl());
-    }
-
-    public function testUnauthorised(): void
-    {
-        $exception = ConnectionException::unauthorised($this->relayUrl);
-
-        $this->assertStringContainsString('Unauthorised connection to relay', $exception->getMessage());
-        $this->assertStringContainsString('wss://relay.example.com', $exception->getMessage());
-        $this->assertSame(401, $exception->getCode());
-        $this->assertSame($this->relayUrl, $exception->getRelayUrl());
-    }
 }

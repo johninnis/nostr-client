@@ -15,6 +15,7 @@ use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
@@ -49,6 +50,7 @@ use function Amp\weakClosure;
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
     private ?AuthChallengeHandlerInterface $authHandler = null;
+    private ?ReconnectionListenerInterface $reconnectionListener = null;
     private array $connections = [];
     private array $activeWebSockets = [];
     private array $pendingResponses = [];
@@ -69,6 +71,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
     {
         $this->authHandler = $handler;
+    }
+
+    #[Override]
+    public function setReconnectionListener(ReconnectionListenerInterface $listener): void
+    {
+        $this->reconnectionListener = $listener;
     }
 
     #[Override]
@@ -157,11 +165,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function subscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId, Filter $filter, ?EventHandlerInterface $handler = null): void
     {
-        $this->subscribeMultiple($relayUrl, $subscriptionId, [$filter], $handler);
+        $this->subscribeMultiple($relayUrl, $subscriptionId, new FilterCollection([$filter]), $handler);
     }
 
     #[Override]
-    public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, array $filters, ?EventHandlerInterface $handler = null): void
+    public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, FilterCollection $filters, ?EventHandlerInterface $handler = null): void
     {
         $websocket = $this->getWebsocket($relayUrl);
 
@@ -172,7 +180,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $this->subscriptionHandlers[$this->handlerKey($relayUrl, $subscriptionId)] = $handler;
         }
 
-        $message = new ReqMessage($subscriptionId, new FilterCollection($filters));
+        $message = new ReqMessage($subscriptionId, $filters);
 
         try {
             $websocket->sendText($message->toJson());
@@ -751,12 +759,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     'attempt' => $attempt,
                 ]);
 
-                $callback = $config->getOnReconnected();
-                if (null !== $callback) {
+                if (null !== $this->reconnectionListener) {
                     try {
-                        $callback($relayUrl);
+                        $this->reconnectionListener->onReconnected($relayUrl);
                     } catch (Throwable $e) {
-                        $this->logger->error('onReconnected callback threw', [
+                        $this->logger->error('onReconnected listener threw', [
                             'relay' => $urlString,
                             'error' => $e->getMessage(),
                         ]);

@@ -31,31 +31,4 @@ final class ConnectionException extends ClientException
             relayUrl: $relayUrl
         );
     }
-
-    public static function timeout(RelayUrl $relayUrl, int $timeoutSeconds): self
-    {
-        return new self(
-            message: 'Connection timeout after '.$timeoutSeconds.'s for relay '.(string) $relayUrl,
-            code: 408,
-            relayUrl: $relayUrl
-        );
-    }
-
-    public static function refused(RelayUrl $relayUrl): self
-    {
-        return new self(
-            message: 'Connection refused by relay '.(string) $relayUrl,
-            code: 61,
-            relayUrl: $relayUrl
-        );
-    }
-
-    public static function unauthorised(RelayUrl $relayUrl): self
-    {
-        return new self(
-            message: 'Unauthorised connection to relay '.(string) $relayUrl,
-            code: 401,
-            relayUrl: $relayUrl
-        );
-    }
 }
