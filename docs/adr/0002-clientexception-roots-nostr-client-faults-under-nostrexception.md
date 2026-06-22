@@ -1,4 +1,4 @@
-# 1. `ClientException` roots nostr-client faults under `NostrException`
+# 2. `ClientException` roots nostr-client faults under `NostrException`
 
 ## Status
 

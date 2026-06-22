@@ -170,7 +170,7 @@ See [`examples/`](examples/) for complete working examples.
 
 Failures split into two kinds. Anticipated domain outcomes (a well-formed operation whose answer is "no") are **returned** as typed values (`?T` or a `*Failure`), never thrown, so the caller is statically forced to handle them. Only **faults** — violated invariants, programmer errors, and infrastructure failures — are thrown.
 
-nostr-client's faults are `ClientException` (abstract) extending `NostrException`, with `ConnectionException` (final) extending `ClientException`. A consumer application that depends on nostr-client roots its **own** faults at its own independent base, not under `NostrException`. The rationale for rooting faults by whose code raises them rather than by the dependency graph is recorded in [ADR-0001](docs/adr/0001-clientexception-roots-nostr-client-faults-under-nostrexception.md).
+nostr-client's faults are `ClientException` (abstract) extending `NostrException`, with `ConnectionException` (final) extending `ClientException`. A consumer application that depends on nostr-client roots its **own** faults at its own independent base, not under `NostrException`. The rationale for rooting faults by whose code raises them rather than by the dependency graph is recorded in [ADR-0002](docs/adr/0002-clientexception-roots-nostr-client-faults-under-nostrexception.md).
 
 Retry logic belongs in your application layer where you have full business context.
 
