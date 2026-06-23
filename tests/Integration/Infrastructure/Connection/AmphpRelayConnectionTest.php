@@ -51,4 +51,36 @@ final class AmphpRelayConnectionTest extends TestCase
         $expectedClose = new CloseMessage($keepAlive);
         self::assertContains($expectedClose->toJson(), $websocket->sentTexts);
     }
+
+    public function testDeliversRelayNoticeOncePerHandlerRegardlessOfSubscriptionCount(): void
+    {
+        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $websocket = new FakeWebsocketConnection(WebsocketMessage::fromText('["NOTICE","relay is shutting down"]'));
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($websocket)),
+            new JsonMessageDeserialiser(),
+        );
+
+        $handler = $this->createMock(EventHandlerInterface::class);
+        $handler->expects(self::once())
+            ->method('handleNotice')
+            ->with($relayUrl, 'relay is shutting down');
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+
+        $filter = Filter::fromArray(['kinds' => [1]]);
+        self::assertNotNull($filter);
+
+        $first = SubscriptionId::fromString('sub-1');
+        $second = SubscriptionId::fromString('sub-2');
+        self::assertNotNull($first);
+        self::assertNotNull($second);
+
+        $connection->subscribe($relayUrl, $first, $filter, $handler);
+        $connection->subscribe($relayUrl, $second, $filter, $handler);
+
+        delay(0.1);
+    }
 }

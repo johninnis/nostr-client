@@ -38,7 +38,7 @@ interface ConnectionHandlerInterface
 
     public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void;
 
-    public function ping(RelayUrl $relayUrl): bool;
+    public function ping(RelayUrl $relayUrl): void;
 
     public function isConnected(RelayUrl $relayUrl): bool;
 

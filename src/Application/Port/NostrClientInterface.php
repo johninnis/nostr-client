@@ -52,7 +52,7 @@ interface NostrClientInterface
 
     public function isConnected(RelayUrl $relay): bool;
 
-    public function ping(RelayUrl $relay): bool;
+    public function ping(RelayUrl $relay): void;
 
     public function getConnection(RelayUrl $relay): ?RelayConnection;
 

@@ -267,13 +267,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     }
 
     #[Override]
-    public function ping(RelayUrl $relayUrl): bool
+    public function ping(RelayUrl $relayUrl): void
     {
-        $websocket = $this->getWebsocket($relayUrl);
-
-        $websocket->ping();
-
-        return true;
+        $this->getWebsocket($relayUrl)->ping();
     }
 
     #[Override]
@@ -591,10 +587,19 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         $prefix = (string) $relayUrl.':';
+        $notifiedHandlerIds = [];
         foreach ($this->subscriptionHandlers as $key => $handler) {
-            if (str_starts_with($key, $prefix)) {
-                $handler->handleNotice($relayUrl, $notice);
+            if (!str_starts_with($key, $prefix)) {
+                continue;
             }
+
+            $handlerId = spl_object_id($handler);
+            if (isset($notifiedHandlerIds[$handlerId])) {
+                continue;
+            }
+
+            $notifiedHandlerIds[$handlerId] = true;
+            $handler->handleNotice($relayUrl, $notice);
         }
     }
 
@@ -668,12 +673,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $activeSubscriptions = $connection->getSubscriptions();
             $connection->clearSubscriptions();
 
-            foreach ($activeSubscriptions as $subscriptionIdString => $_) {
+            foreach ($activeSubscriptions as $subscription) {
+                $subscriptionId = $subscription->getId();
                 try {
-                    $subscriptionId = SubscriptionId::fromString($subscriptionIdString);
-                    if (null === $subscriptionId) {
-                        continue;
-                    }
                     $key = $this->handlerKey($relayUrl, $subscriptionId);
                     $handler = $this->subscriptionHandlers[$key] ?? null;
                     unset($this->subscriptionHandlers[$key]);
@@ -684,7 +686,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 } catch (Throwable $e) {
                     $this->logger->warning('Failed to notify handler of connection error', [
                         'relay' => $urlString,
-                        'subscription_id' => $subscriptionIdString,
+                        'subscription_id' => (string) $subscriptionId,
                         'error' => $e->getMessage(),
                     ]);
                 }

@@ -424,8 +424,7 @@ final class ConnectionManagerTest extends TestCase
         $this->handlerConnections[(string) $relay2] = new RelayConnection($relay2, ConnectionState::CONNECTED, $config);
 
         $handler
-            ->method('ping')
-            ->willReturn(true);
+            ->method('ping');
 
         $results = $manager->healthCheck();
 
@@ -485,10 +484,9 @@ final class ConnectionManagerTest extends TestCase
         $handler
             ->expects($this->once())
             ->method('ping')
-            ->with($this->relayUrl)
-            ->willReturn(true);
+            ->with($this->relayUrl);
 
-        $this->assertTrue($manager->ping($this->relayUrl));
+        $manager->ping($this->relayUrl);
     }
 
     public function testPingEnsuresConnection(): void

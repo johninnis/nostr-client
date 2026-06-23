@@ -167,9 +167,7 @@ final class ConnectionManager implements NostrClientInterface
     #[Override]
     public function isConnected(RelayUrl $relay): bool
     {
-        $connection = $this->getConnection($relay);
-
-        return null !== $connection && $connection->isHealthy();
+        return $this->connectionHandler->isConnected($relay);
     }
 
     #[Override]
@@ -233,11 +231,11 @@ final class ConnectionManager implements NostrClientInterface
     }
 
     #[Override]
-    public function ping(RelayUrl $relay): bool
+    public function ping(RelayUrl $relay): void
     {
         $this->ensureConnected($relay);
 
-        return $this->connectionHandler->ping($relay);
+        $this->connectionHandler->ping($relay);
     }
 
     private function ensureConnected(RelayUrl $relay): void
@@ -249,17 +247,14 @@ final class ConnectionManager implements NostrClientInterface
 
     private function unsubscribeAll(RelayUrl $relay, RelayConnection $connection): void
     {
-        foreach ($connection->getSubscriptions() as $subscriptionIdString => $_) {
-            $subscriptionId = SubscriptionId::fromString($subscriptionIdString);
-            if (null === $subscriptionId) {
-                continue;
-            }
+        foreach ($connection->getSubscriptions() as $subscription) {
+            $subscriptionId = $subscription->getId();
             try {
                 $this->connectionHandler->unsubscribe($relay, $subscriptionId);
             } catch (Throwable $e) {
                 $this->logger->warning('Failed to unsubscribe during disconnect', [
                     'relay' => (string) $relay,
-                    'subscription_id' => $subscriptionIdString,
+                    'subscription_id' => (string) $subscriptionId,
                     'error' => $e->getMessage(),
                 ]);
             }
