@@ -9,7 +9,9 @@ Accepted
 "Is this relay healthy?" has two genuinely different meanings, and a single health check cannot answer
 both. A reviewer seeing two health-check code paths — `ConnectionManager::healthCheck()` and the
 standalone `WebSocketHealthChecker` reached through a separate factory method — is tempted to read one
-as a duplicate of the other and merge them.
+as a duplicate of the other and merge them. The temptation comes from the one thing they do share: both
+report a `HealthCheckResult`. That shared result type is deliberate vocabulary, not evidence of a
+duplicated operation — they are two different probes that happen to speak the same result.
 
 - During a session the question is *"are the connections I already hold still alive, and how fast?"*
   Answering that by opening a fresh socket would measure the wrong thing (a brand-new connection, not
@@ -30,6 +32,14 @@ The two questions are served by two surfaces with different lifecycles.
   `NostrClientFactory::createHealthChecker()`) opens a fresh WebSocket to a single relay under a
   timeout, records the round-trip, and closes it immediately. It needs no `NostrClientInterface` and
   holds no long-lived state, so it can probe a relay the client has no relationship with.
+
+The signatures make the split concrete. `healthCheck()` takes no argument and returns a
+`HealthCheckResultCollection`: it cannot name a target because its target *is* "every relay I already
+hold", discovered from the live connections. `checkHealth(RelayUrl $relayUrl, float $timeout)` takes the
+one relay to probe and returns a single `HealthCheckResult`, because its target is a relay handed in
+from outside — typically one the client has no connection to. Neither signature can be expressed in
+terms of the other without a caller lying: a no-argument call has no way to name an unconnected relay,
+and a single-`RelayUrl` call has no way to mean "all my live ones".
 
 The connectionless checker is a separate object reached by a separate factory method precisely because
 its lifecycle is different: it is constructed and used without a `ConnectionManager`, and it owns no
