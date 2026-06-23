@@ -53,11 +53,11 @@ final class RelayConnection
     public function addSubscription(
         SubscriptionId $subscriptionId,
         FilterCollection $filters,
-        SubscriptionState $initialState = SubscriptionState::PENDING,
+        SubscriptionState $initialState = SubscriptionState::Pending,
     ): void {
         $subscription = Subscription::create($subscriptionId, $filters);
 
-        if (SubscriptionState::PENDING !== $initialState) {
+        if (SubscriptionState::Pending !== $initialState) {
             $subscription = $subscription->withState($initialState);
         }
 

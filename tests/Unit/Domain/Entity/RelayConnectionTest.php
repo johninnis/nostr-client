@@ -100,7 +100,7 @@ final class RelayConnectionTest extends TestCase
 
         $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]));
 
-        $this->assertSame(SubscriptionState::PENDING, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertSame(SubscriptionState::Pending, $this->connection->getSubscriptionState($subscriptionId));
     }
 
     public function testSubscriptionWithExplicitInitialState(): void
@@ -108,9 +108,9 @@ final class RelayConnectionTest extends TestCase
         $subscriptionId = SubscriptionId::generate();
         $filter = new Filter();
 
-        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]), SubscriptionState::ACTIVE);
+        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]), SubscriptionState::Active);
 
-        $this->assertSame(SubscriptionState::ACTIVE, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertSame(SubscriptionState::Active, $this->connection->getSubscriptionState($subscriptionId));
     }
 
     public function testUpdateSubscriptionState(): void
@@ -119,13 +119,13 @@ final class RelayConnectionTest extends TestCase
         $filter = new Filter();
 
         $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]));
-        $this->assertSame(SubscriptionState::PENDING, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertSame(SubscriptionState::Pending, $this->connection->getSubscriptionState($subscriptionId));
 
-        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::ACTIVE));
-        $this->assertSame(SubscriptionState::ACTIVE, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active));
+        $this->assertSame(SubscriptionState::Active, $this->connection->getSubscriptionState($subscriptionId));
 
-        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::LIVE));
-        $this->assertSame(SubscriptionState::LIVE, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Live));
+        $this->assertSame(SubscriptionState::Live, $this->connection->getSubscriptionState($subscriptionId));
     }
 
     public function testGetSubscriptionStateReturnsNullForUnknownSubscription(): void
@@ -139,7 +139,7 @@ final class RelayConnectionTest extends TestCase
     {
         $subscriptionId = SubscriptionId::generate();
 
-        $this->assertFalse($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::ACTIVE));
+        $this->assertFalse($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active));
         $this->assertNull($this->connection->getSubscriptionState($subscriptionId));
     }
 

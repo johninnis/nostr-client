@@ -187,11 +187,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         try {
             $websocket->sendText($message->toJson());
-            if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::ACTIVE)) {
+            if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active)) {
                 $this->logger->debug('Attempted to update state of unknown subscription', [
                     'relay' => (string) $relayUrl,
                     'subscription_id' => (string) $subscriptionId,
-                    'target_state' => SubscriptionState::ACTIVE->value,
+                    'target_state' => SubscriptionState::Active->value,
                 ]);
             }
         } catch (Throwable $e) {
@@ -525,11 +525,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             return;
         }
 
-        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::LIVE)) {
+        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::Live)) {
             $this->logger->debug('Attempted to update state of unknown subscription', [
                 'relay' => (string) $relayUrl,
                 'subscription_id' => (string) $subscriptionId,
-                'target_state' => SubscriptionState::LIVE->value,
+                'target_state' => SubscriptionState::Live->value,
             ]);
         }
 
@@ -550,11 +550,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             return;
         }
 
-        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::CLOSED_BY_RELAY)) {
+        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::ClosedByRelay)) {
             $this->logger->debug('Attempted to update state of unknown subscription', [
                 'relay' => (string) $relayUrl,
                 'subscription_id' => (string) $subscriptionId,
-                'target_state' => SubscriptionState::CLOSED_BY_RELAY->value,
+                'target_state' => SubscriptionState::ClosedByRelay->value,
             ]);
         }
 
