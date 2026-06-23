@@ -21,9 +21,14 @@ $relays = [
 
 $connectedRelays = [];
 foreach ($relays as $url) {
+    $relay = RelayUrl::fromString($url);
+    if ($relay === null) {
+        echo "Invalid relay URL: {$url}\n";
+        continue;
+    }
     try {
-        $client->connect(RelayUrl::fromString($url));
-        $connectedRelays[] = $url;
+        $client->connect($relay);
+        $connectedRelays[] = $relay;
         echo "Connected to: {$url}\n";
     } catch (\Throwable $e) {
         echo "Failed to connect to {$url}: {$e->getMessage()}\n";
@@ -72,8 +77,7 @@ $filter = new Filter(
 echo "Starting stream...\n";
 
 $subscriptionIds = [];
-foreach ($connectedRelays as $url) {
-    $relay = RelayUrl::fromString($url);
+foreach ($connectedRelays as $relay) {
     $subscriptionIds[] = ['relay' => $relay, 'id' => $client->subscribe($relay, $filter, $handler)];
 }
 

@@ -23,9 +23,13 @@ $relays = [
 $connectedRelays = [];
 foreach ($relays as $url) {
     $relay = RelayUrl::fromString($url);
+    if ($relay === null) {
+        echo "Invalid relay URL: {$url}\n";
+        continue;
+    }
     try {
         $client->connect($relay);
-        $connectedRelays[] = $url;
+        $connectedRelays[] = $relay;
         echo "Connected to: {$url}\n";
     } catch (\Throwable $e) {
         echo "Failed to connect to {$url}: {$e->getMessage()}\n";
@@ -67,8 +71,8 @@ $filter = new Filter(
     limit: 10
 );
 
-$relay = RelayUrl::fromString($connectedRelays[0]);
-echo "Subscribing to text notes on {$connectedRelays[0]}...\n";
+$relay = $connectedRelays[0];
+echo "Subscribing to text notes on {$relay}...\n";
 $subscriptionId = $client->subscribe($relay, $filter, $handler);
 
 \Amp\delay(5);

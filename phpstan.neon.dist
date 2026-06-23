@@ -6,6 +6,7 @@ parameters:
     paths:
         - src
         - tests
+        - examples
     tmpDir: var/phpstan
     ignoreErrors:
         # PHP cannot express an array's value type natively (e.g. list<string>)
