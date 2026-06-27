@@ -23,7 +23,7 @@ final class RelayConnection
         private ConnectionState $state,
         private readonly ConnectionConfig $config,
     ) {
-        $this->subscriptions = SubscriptionCollection::empty();
+        $this->subscriptions = new SubscriptionCollection();
     }
 
     public function getRelayUrl(): RelayUrl
@@ -97,7 +97,7 @@ final class RelayConnection
 
     public function clearSubscriptions(): void
     {
-        $this->subscriptions = SubscriptionCollection::empty();
+        $this->subscriptions = new SubscriptionCollection();
     }
 
     public function getSubscriptionCount(): int

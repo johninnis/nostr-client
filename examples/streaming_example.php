@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/../vendor/autoload.php';
 
+use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
@@ -70,7 +71,7 @@ $handler = new class($eventCount) implements EventHandlerInterface {
 };
 
 $filter = new Filter(
-    kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)],
+    kinds: EventKindCollection::fromInts([EventKind::fromInt(EventKind::TEXT_NOTE)]),
     limit: 50
 );
 
