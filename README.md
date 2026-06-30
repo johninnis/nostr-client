@@ -284,7 +284,7 @@ src/
   Infrastructure/
     Connection/AmphpRelayConnection      WebSocket connection handler (AMPHP)
     Connection/ConnectionFactory         WebSocket connection creation
-    Connection/ActiveWebSocket           Active WebSocket holder
+    Connection/RelaySession              Per-relay live state (socket, handlers, pending)
     Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
     Connection/ConnectionManager         Implements NostrClientInterface
     Connection/WebSocketHealthChecker    Standalone relay health checker
