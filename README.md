@@ -86,10 +86,12 @@ $client->close();
 ```php
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
+use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 
-$keyPair = KeyPair::generate();
+$signer = Secp256k1Signer::create();
+$keyPair = KeyPair::generate($signer);
 $event = EventFactory::createTextNote($keyPair->getPublicKey(), 'Hello Nostr!');
-$signedEvent = $event->sign($keyPair->getPrivateKey());
+$signedEvent = $event->sign($keyPair, $signer);
 
 $client->publishEvent($relay, $signedEvent);
 ```
@@ -207,15 +209,19 @@ Register an auth handler to sign relay challenges. When `publishEvent()` is reje
 ```php
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 
-$authHandler = new class($keyPair) implements AuthChallengeHandlerInterface {
-    public function __construct(private KeyPair $keyPair) {}
+$authHandler = new class($keyPair, $signer) implements AuthChallengeHandlerInterface {
+    public function __construct(
+        private KeyPair $keyPair,
+        private SignatureServiceInterface $signer,
+    ) {}
 
     public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
     {
         $event = EventFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge);
 
-        return $event->sign($this->keyPair->getPrivateKey());
+        return $event->sign($this->keyPair, $this->signer);
     }
 };
 
