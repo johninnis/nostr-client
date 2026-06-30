@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Application\Port;
 
+use Amp\Future;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -11,6 +12,7 @@ use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
@@ -30,7 +32,10 @@ interface NostrClientInterface
 
     public function reconnect(RelayUrl $relay): void;
 
-    public function publishEvent(RelayUrl $relay, Event $event): void;
+    /**
+     * @return Future<PublishResult>
+     */
+    public function publishEvent(RelayUrl $relay, Event $event): Future;
 
     public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void;
 

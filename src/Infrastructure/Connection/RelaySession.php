@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\DeferredFuture;
+use Amp\Future;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -23,8 +25,11 @@ final class RelaySession
     /** @var array<string, EventHandlerInterface> */
     private array $handlers = [];
 
-    /** @var array<string, DeferredFuture<bool>> */
+    /** @var array<string, DeferredFuture<PublishResult>> */
     private array $pendingResponses = [];
+
+    /** @var array<string, true> */
+    private array $pendingAuthEventIds = [];
 
     /** @var array<string, Event> */
     private array $pendingEvents = [];
@@ -96,15 +101,29 @@ final class RelaySession
         return array_values($distinct);
     }
 
-    public function createPendingResponse(string $key): void
+    /**
+     * @return Future<PublishResult>
+     */
+    public function trackPublish(string $eventIdHex): Future
+    {
+        $this->openPendingResponse($eventIdHex);
+
+        // Read back across the method boundary so the future carries the array's declared
+        // DeferredFuture<PublishResult> type rather than the unparameterised new DeferredFuture.
+        return $this->pendingResponses[$eventIdHex]->getFuture();
+    }
+
+    private function openPendingResponse(string $eventIdHex): void
     {
         $deferred = new DeferredFuture();
+        // Ignored so a fire-and-forget publish whose future the caller drops does not
+        // surface as an unhandled error; awaiting the returned future still yields the outcome.
         $deferred->getFuture()->ignore();
-        $this->pendingResponses[$key] = $deferred;
+        $this->pendingResponses[$eventIdHex] = $deferred;
     }
 
     /**
-     * @param DeferredFuture<bool> $response
+     * @param DeferredFuture<PublishResult> $response
      */
     public function setPendingResponse(string $key, DeferredFuture $response): void
     {
@@ -112,7 +131,7 @@ final class RelaySession
     }
 
     /**
-     * @return DeferredFuture<bool>|null
+     * @return DeferredFuture<PublishResult>|null
      */
     public function getPendingResponse(string $key): ?DeferredFuture
     {
@@ -125,11 +144,26 @@ final class RelaySession
     }
 
     /**
-     * @return array<string, DeferredFuture<bool>>
+     * @return array<string, DeferredFuture<PublishResult>>
      */
     public function pendingResponses(): array
     {
         return $this->pendingResponses;
+    }
+
+    public function markPendingAuth(string $eventIdHex): void
+    {
+        $this->pendingAuthEventIds[$eventIdHex] = true;
+    }
+
+    public function isPendingAuth(string $eventIdHex): bool
+    {
+        return isset($this->pendingAuthEventIds[$eventIdHex]);
+    }
+
+    public function clearPendingAuth(string $eventIdHex): void
+    {
+        unset($this->pendingAuthEventIds[$eventIdHex]);
     }
 
     public function setPendingEvent(string $eventIdHex, Event $event): void

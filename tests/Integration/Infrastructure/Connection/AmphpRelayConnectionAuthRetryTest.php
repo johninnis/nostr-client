@@ -33,7 +33,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
 
-        $connection->publishEvent($relayUrl, $event);
+        $future = $connection->publishEvent($relayUrl, $event);
         delay(0.01);
         self::assertSame(1, self::countFrames($ws, 'EVENT'));
 
@@ -50,7 +50,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         self::assertSame(2, self::countFrames($ws, 'EVENT'), 'the parked publish must be retransmitted once auth is accepted');
 
         $ws->pushInbound(sprintf('["OK","%s",true,""]', $event->getId()->toHex()));
-        $connection->awaitPendingPublishes($relayUrl, timeoutSeconds: 1.0);
+        self::assertTrue($future->await()->isAccepted(), 'the publish resolves accepted once stored after auth');
 
         $connection->disconnect($relayUrl);
     }
@@ -64,7 +64,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
 
-        $connection->publishEvent($relayUrl, $event);
+        $future = $connection->publishEvent($relayUrl, $event);
         delay(0.01);
 
         $ws->pushInbound(sprintf('["OK","%s",false,"auth-required: please authenticate"]', $event->getId()->toHex()));
@@ -74,8 +74,10 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         self::assertSame(1, self::countFrames($ws, 'EVENT'));
 
         $ws->pushInbound(sprintf('["OK","%s",false,"error: authentication failed"]', $authEvent->getId()->toHex()));
-        delay(0.01);
 
+        $result = $future->await();
+        self::assertFalse($result->isAccepted(), 'a rejected auth resolves the parked publish as rejected');
+        self::assertStringContainsString('auth', $result->getMessage());
         self::assertSame(1, self::countFrames($ws, 'EVENT'), 'a rejected auth must fail the parked publish, never retransmit it');
 
         $connection->disconnect($relayUrl);

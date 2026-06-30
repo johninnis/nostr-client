@@ -6,6 +6,7 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\CancelledException;
 use Amp\DeferredCancellation;
+use Amp\Future;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
@@ -16,6 +17,7 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
@@ -50,7 +52,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
     private const string APPLICATION_PING_NOTICE = 'ping';
     private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
-    private const string AUTH_RESPONSE_PREFIX = 'auth-event:';
 
     private ?AuthChallengeHandlerInterface $authHandler = null;
     private ?ReconnectionListenerInterface $reconnectionListener = null;
@@ -88,7 +89,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
     {
         $session = $this->requireSession($relayUrl);
-        $session->createPendingResponse(self::AUTH_RESPONSE_PREFIX.$signedAuthEvent->getId()->toHex());
+        $session->markPendingAuth($signedAuthEvent->getId()->toHex());
 
         $session->getWebsocket()->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
     }
@@ -201,16 +202,21 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
+    /**
+     * @return Future<PublishResult>
+     */
     #[Override]
-    public function publishEvent(RelayUrl $relayUrl, Event $event): void
+    public function publishEvent(RelayUrl $relayUrl, Event $event): Future
     {
         $session = $this->requireSession($relayUrl);
         $eventIdHex = $event->getId()->toHex();
 
         $session->setPendingEvent($eventIdHex, $event);
-        $session->createPendingResponse($eventIdHex);
+        $future = $session->trackPublish($eventIdHex);
 
         $session->getWebsocket()->sendText(new EventMessage($event)->toJson());
+
+        return $future;
     }
 
     #[Override]
@@ -405,37 +411,32 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         $session->removePendingResponse($eventIdHex);
 
-        if ($message->isAccepted()) {
-            $session->removePendingEvent($eventIdHex);
-            $future->complete(true);
-        } elseif ($message->isAuthRequired()) {
+        if ($message->isAuthRequired()) {
             $session->parkPublish(new ParkedPublish($eventIdHex, $future));
-        } else {
-            $session->removePendingEvent($eventIdHex);
-            $future->error(
-                ConnectionException::forRelay($relayUrl, 'Event rejected: '.$message->getMessage())
-            );
+
+            return;
         }
+
+        $session->removePendingEvent($eventIdHex);
+        $future->complete($message->isAccepted()
+            ? PublishResult::accepted($message->getMessage())
+            : PublishResult::rejected($message->getMessage()));
     }
 
     private function isAuthOkResponse(RelayUrl $relayUrl, RelaySession $session, OkMessage $message): bool
     {
-        $authDeferred = $session->getPendingResponse(self::AUTH_RESPONSE_PREFIX.$message->getEventId()->toHex());
+        $authEventIdHex = $message->getEventId()->toHex();
 
-        if (null === $authDeferred) {
+        if (!$session->isPendingAuth($authEventIdHex)) {
             return false;
         }
 
-        $session->removePendingResponse(self::AUTH_RESPONSE_PREFIX.$message->getEventId()->toHex());
+        $session->clearPendingAuth($authEventIdHex);
 
         if ($message->isAccepted()) {
-            $authDeferred->complete(true);
             $this->flushAuthRetryQueue($relayUrl, $session);
         } else {
-            $authDeferred->error(
-                ConnectionException::forRelay($relayUrl, 'Auth rejected: '.$message->getMessage())
-            );
-            $this->failAuthRetryQueue($relayUrl, $session, $message->getMessage());
+            $this->failAuthRetryQueue($session, $message->getMessage());
         }
 
         return true;
@@ -468,13 +469,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
-    private function failAuthRetryQueue(RelayUrl $relayUrl, RelaySession $session, string $reason): void
+    private function failAuthRetryQueue(RelaySession $session, string $reason): void
     {
         foreach ($session->takeAuthRetryQueue() as $parked) {
             $session->removePendingEvent($parked->getEventIdHex());
-            $parked->getDeferred()->error(
-                ConnectionException::forRelay($relayUrl, 'Auth failed: '.$reason)
-            );
+            $parked->getDeferred()->complete(PublishResult::rejected('auth-required, auth rejected: '.$reason));
         }
     }
 
@@ -622,6 +621,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         foreach ($session->pendingResponses() as $key => $deferred) {
             $session->removePendingResponse($key);
             $deferred->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
+        }
+
+        foreach ($session->takeAuthRetryQueue() as $parked) {
+            $parked->getDeferred()->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
         }
 
         $session->loseWebsocket();

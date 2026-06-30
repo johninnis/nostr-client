@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Tests\Unit\Infrastructure\Connection;
 
+use Amp\Future;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -12,6 +13,7 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionManager;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
@@ -350,9 +352,12 @@ final class ConnectionManagerTest extends TestCase
         $handler
             ->expects($this->once())
             ->method('publishEvent')
-            ->with($this->relayUrl, $event);
+            ->with($this->relayUrl, $event)
+            ->willReturn(Future::complete(PublishResult::accepted()));
 
-        $manager->publishEvent($this->relayUrl, $event);
+        $result = $manager->publishEvent($this->relayUrl, $event)->await();
+
+        $this->assertTrue($result->isAccepted());
     }
 
     public function testGetConnectedRelays(): void

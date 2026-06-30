@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\DeferredFuture;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 
 final readonly class ParkedPublish
 {
     /**
-     * @param DeferredFuture<bool> $deferred
+     * @param DeferredFuture<PublishResult> $deferred
      */
     public function __construct(
         private string $eventIdHex,
@@ -23,7 +24,7 @@ final readonly class ParkedPublish
     }
 
     /**
-     * @return DeferredFuture<bool>
+     * @return DeferredFuture<PublishResult>
      */
     public function getDeferred(): DeferredFuture
     {

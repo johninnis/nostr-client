@@ -16,6 +16,7 @@ use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
@@ -152,12 +153,15 @@ final class ConnectionManager implements NostrClientInterface
         $this->connectionHandler->unsubscribe($relay, $subscriptionId);
     }
 
+    /**
+     * @return Future<PublishResult>
+     */
     #[Override]
-    public function publishEvent(RelayUrl $relay, Event $event): void
+    public function publishEvent(RelayUrl $relay, Event $event): Future
     {
         $this->ensureConnected($relay);
 
-        $this->connectionHandler->publishEvent($relay, $event);
+        return $this->connectionHandler->publishEvent($relay, $event);
     }
 
     #[Override]

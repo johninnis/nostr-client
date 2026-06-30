@@ -93,8 +93,19 @@ $keyPair = KeyPair::generate($signer);
 $event = EventFactory::createTextNote($keyPair->getPublicKey(), 'Hello Nostr!');
 $signedEvent = $event->sign($keyPair, $signer);
 
-$client->publishEvent($relay, $signedEvent);
+// publishEvent() returns a Future<PublishResult>. Await it for the relay's verdict,
+// or drop it for fire-and-forget.
+$result = $client->publishEvent($relay, $signedEvent)->await();
+
+if ($result->isAccepted()) {
+    echo "Stored by the relay\n";
+} else {
+    echo "Rejected: {$result->getMessage()}\n";
+}
 ```
+
+A relay accepting or rejecting an event (`duplicate`, `rate-limited`, `blocked`, …) is an anticipated
+outcome carried in the `PublishResult`; only a broken connection throws.
 
 ### Health Checking
 
@@ -193,12 +204,14 @@ $client->setReconnectionListener($listener);
 
 ### Awaiting Publishes
 
-`publishEvent()` returns once the event has been sent. To block until the relay has acknowledged all
-in-flight publishes for a relay (including any parked on a NIP-42 auth challenge), await them with an
-optional timeout in seconds.
+`publishEvent()` returns a `Future<PublishResult>` as soon as the event has been sent — await each
+future for that publish's individual outcome. To instead block until every in-flight publish for a
+relay has been acknowledged (including any parked on a NIP-42 auth challenge) without inspecting each
+result, drain them with an optional timeout in seconds.
 
 ```php
-$client->publishEvent($relay, $signedEvent);
+$client->publishEvent($relay, $eventA);
+$client->publishEvent($relay, $eventB);
 $client->awaitPendingPublishes($relay, timeoutSeconds: 5.0);
 ```
 
@@ -249,8 +262,17 @@ Retry logic belongs in your application layer where you have full business conte
 
 ```php
 try {
-    $client->publishEvent($relay, $event);
-} catch (\Throwable $e) {
+    $result = $client->publishEvent($relay, $event)->await();
+
+    if (!$result->isAccepted()) {
+        // The relay declined the event — an outcome, not a fault.
+        $this->logger->info('Relay rejected the event', [
+            'relay' => (string) $relay,
+            'reason' => $result->getMessage(),
+        ]);
+    }
+} catch (ConnectionException $e) {
+    // The connection broke mid-publish — a fault.
     $this->logger->error('Publish failed', [
         'relay' => (string) $relay,
         'error' => $e->getMessage(),
@@ -276,6 +298,7 @@ src/
     Enum/ConnectionState                 State machine (disconnected/connected/disconnecting/failed)
     ValueObject/ConnectionConfig         Connection configuration
     ValueObject/HealthCheckResult        Health check outcome
+    ValueObject/PublishResult            Relay accept/reject verdict on a publish
     Service/AuthChallengeHandlerInterface    NIP-42 auth callback (application provides)
     Service/ReconnectionListenerInterface    Reconnect-succeeded callback (application provides)
     Service/RelayHealthCheckerInterface      Standalone health check contract
