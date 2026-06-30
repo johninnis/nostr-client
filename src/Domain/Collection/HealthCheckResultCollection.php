@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Domain\ValueObject;
+namespace Innis\Nostr\Client\Domain\Collection;
 
+use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Core\Domain\Collection\TypedCollection;
 use Override;
 

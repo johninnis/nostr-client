@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Tests\Unit\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
+use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
-use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;

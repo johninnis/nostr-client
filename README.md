@@ -270,12 +270,12 @@ src/
     Port/NostrClientInterface        Public API contract
     Port/ConnectionHandlerInterface  Infrastructure port
   Domain/
+    Collection/RelayConnectionCollection     Typed connection collection
+    Collection/HealthCheckResultCollection   Typed health result collection
     Entity/RelayConnection               Connection state and subscriptions
-    Entity/RelayConnectionCollection     Typed connection collection
     Enum/ConnectionState                 State machine (disconnected/connected/disconnecting/failed)
     ValueObject/ConnectionConfig         Connection configuration
     ValueObject/HealthCheckResult        Health check outcome
-    ValueObject/HealthCheckResultCollection  Typed health result collection
     Service/AuthChallengeHandlerInterface    NIP-42 auth callback (application provides)
     Service/ReconnectionListenerInterface    Reconnect-succeeded callback (application provides)
     Service/RelayHealthCheckerInterface      Standalone health check contract

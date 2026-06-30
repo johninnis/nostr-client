@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Tests\Unit\Domain\ValueObject;
+namespace Innis\Nostr\Client\Tests\Unit\Domain\Collection;
 
+use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
-use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;

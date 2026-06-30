@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Tests\Unit\Domain\Entity;
+namespace Innis\Nostr\Client\Tests\Unit\Domain\Collection;
 
+use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
-use Innis\Nostr\Client\Domain\Entity\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
