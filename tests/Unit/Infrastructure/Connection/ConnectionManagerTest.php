@@ -173,7 +173,7 @@ final class ConnectionManagerTest extends TestCase
             });
 
         $manager->connect($this->relayUrl, $config);
-        $connection->updateState(ConnectionState::FAILED);
+        $this->handlerConnections[(string) $this->relayUrl] = $connection->withState(ConnectionState::FAILED);
 
         $this->expectException(ConnectionException::class);
 
@@ -213,14 +213,16 @@ final class ConnectionManagerTest extends TestCase
 
         $handler
             ->method('subscribe')
-            ->willReturnCallback(static function () use ($connection, $subscriptionId): void {
-                $connection->addSubscription($subscriptionId, new FilterCollection([new Filter()]));
+            ->willReturnCallback(function () use ($subscriptionId): void {
+                $url = (string) $this->relayUrl;
+                $this->handlerConnections[$url] = $this->handlerConnections[$url]
+                    ->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
             });
 
         $eventHandler = $this->createStub(EventHandlerInterface::class);
         $manager->subscribe($this->relayUrl, new Filter(), $eventHandler, $subscriptionId);
 
-        $this->assertTrue($connection->hasSubscription($subscriptionId));
+        $this->assertTrue($this->handlerConnections[(string) $this->relayUrl]->hasSubscription($subscriptionId));
 
         $handler
             ->expects($this->once())

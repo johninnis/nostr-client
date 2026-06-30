@@ -16,14 +16,12 @@ use InvalidArgumentException;
 
 final class RelayConnection
 {
-    private SubscriptionCollection $subscriptions;
-
     public function __construct(
         private readonly RelayUrl $relayUrl,
-        private ConnectionState $state,
+        private readonly ConnectionState $state,
         private readonly ConnectionConfig $config,
+        private readonly SubscriptionCollection $subscriptions = new SubscriptionCollection(),
     ) {
-        $this->subscriptions = new SubscriptionCollection();
     }
 
     public function getRelayUrl(): RelayUrl
@@ -36,13 +34,13 @@ final class RelayConnection
         return $this->state;
     }
 
-    public function updateState(ConnectionState $state): void
+    public function withState(ConnectionState $state): self
     {
         if (!$this->state->canTransitionTo($state)) {
             throw new InvalidArgumentException("Invalid state transition from {$this->state->value} to {$state->value}");
         }
 
-        $this->state = $state;
+        return new self($this->relayUrl, $state, $this->config, $this->subscriptions);
     }
 
     public function getConfig(): ConnectionConfig
@@ -50,23 +48,33 @@ final class RelayConnection
         return $this->config;
     }
 
-    public function addSubscription(
+    public function withSubscription(
         SubscriptionId $subscriptionId,
         FilterCollection $filters,
         SubscriptionState $initialState = SubscriptionState::Pending,
-    ): void {
+    ): self {
         $subscription = Subscription::create($subscriptionId, $filters);
 
         if (SubscriptionState::Pending !== $initialState) {
             $subscription = $subscription->withState($initialState);
         }
 
-        $this->subscriptions = $this->subscriptions->add($subscription);
+        return new self($this->relayUrl, $this->state, $this->config, $this->subscriptions->add($subscription));
     }
 
-    public function removeSubscription(SubscriptionId $subscriptionId): void
+    public function withoutSubscription(SubscriptionId $subscriptionId): self
     {
-        $this->subscriptions = $this->subscriptions->remove($subscriptionId);
+        return new self($this->relayUrl, $this->state, $this->config, $this->subscriptions->remove($subscriptionId));
+    }
+
+    public function withSubscriptionState(SubscriptionId $subscriptionId, SubscriptionState $state): self
+    {
+        return new self($this->relayUrl, $this->state, $this->config, $this->subscriptions->withUpdatedState($subscriptionId, $state));
+    }
+
+    public function withoutSubscriptions(): self
+    {
+        return new self($this->relayUrl, $this->state, $this->config, new SubscriptionCollection());
     }
 
     public function hasSubscription(SubscriptionId $subscriptionId): bool
@@ -79,25 +87,9 @@ final class RelayConnection
         return $this->subscriptions;
     }
 
-    public function updateSubscriptionState(SubscriptionId $subscriptionId, SubscriptionState $state): bool
-    {
-        if (!$this->subscriptions->has($subscriptionId)) {
-            return false;
-        }
-
-        $this->subscriptions = $this->subscriptions->withUpdatedState($subscriptionId, $state);
-
-        return true;
-    }
-
     public function getSubscriptionState(SubscriptionId $subscriptionId): ?SubscriptionState
     {
         return $this->subscriptions->getState($subscriptionId);
-    }
-
-    public function clearSubscriptions(): void
-    {
-        $this->subscriptions = new SubscriptionCollection();
     }
 
     public function getSubscriptionCount(): int

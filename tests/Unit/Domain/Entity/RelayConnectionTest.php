@@ -45,19 +45,21 @@ final class RelayConnectionTest extends TestCase
         $this->assertTrue($connection->isHealthy());
     }
 
-    public function testUpdateStateChangesConnectionState(): void
+    public function testWithStateReturnsANewConnectionLeavingTheOriginalUnchanged(): void
     {
-        $this->connection->updateState(ConnectionState::CONNECTED);
-        $this->assertSame(ConnectionState::CONNECTED, $this->connection->getState());
-        $this->assertTrue($this->connection->isHealthy());
+        $connected = $this->connection->withState(ConnectionState::CONNECTED);
+
+        $this->assertSame(ConnectionState::CONNECTED, $connected->getState());
+        $this->assertTrue($connected->isHealthy());
+        $this->assertSame(ConnectionState::DISCONNECTED, $this->connection->getState());
     }
 
-    public function testUpdateStateRejectsInvalidTransition(): void
+    public function testWithStateRejectsInvalidTransition(): void
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid state transition from disconnected to failed');
 
-        $this->connection->updateState(ConnectionState::FAILED);
+        $this->connection->withState(ConnectionState::FAILED);
     }
 
     public function testSubscriptionManagement(): void
@@ -68,64 +70,60 @@ final class RelayConnectionTest extends TestCase
         $this->assertFalse($this->connection->hasSubscription($subscriptionId));
         $this->assertSame(0, $this->connection->getSubscriptionCount());
 
-        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]));
+        $withSub = $this->connection->withSubscription($subscriptionId, new FilterCollection([$filter]));
 
-        $this->assertTrue($this->connection->hasSubscription($subscriptionId));
-        $this->assertSame(1, $this->connection->getSubscriptionCount());
-
-        $subscriptions = $this->connection->getSubscriptions();
-        $this->assertTrue($subscriptions->has($subscriptionId));
-
-        $this->connection->removeSubscription($subscriptionId);
-
+        $this->assertTrue($withSub->hasSubscription($subscriptionId));
+        $this->assertSame(1, $withSub->getSubscriptionCount());
+        $this->assertTrue($withSub->getSubscriptions()->has($subscriptionId));
         $this->assertFalse($this->connection->hasSubscription($subscriptionId));
-        $this->assertSame(0, $this->connection->getSubscriptionCount());
+
+        $withoutSub = $withSub->withoutSubscription($subscriptionId);
+
+        $this->assertFalse($withoutSub->hasSubscription($subscriptionId));
+        $this->assertSame(0, $withoutSub->getSubscriptionCount());
     }
 
     public function testHealthyStatusDetermination(): void
     {
         $this->assertFalse($this->connection->isHealthy());
 
-        $this->connection->updateState(ConnectionState::CONNECTED);
-        $this->assertTrue($this->connection->isHealthy());
+        $connected = $this->connection->withState(ConnectionState::CONNECTED);
+        $this->assertTrue($connected->isHealthy());
 
-        $this->connection->updateState(ConnectionState::FAILED);
-        $this->assertFalse($this->connection->isHealthy());
+        $failed = $connected->withState(ConnectionState::FAILED);
+        $this->assertFalse($failed->isHealthy());
     }
 
     public function testSubscriptionDefaultStateIsPending(): void
     {
         $subscriptionId = SubscriptionId::generate();
-        $filter = new Filter();
 
-        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]));
+        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
 
-        $this->assertSame(SubscriptionState::Pending, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertSame(SubscriptionState::Pending, $connection->getSubscriptionState($subscriptionId));
     }
 
     public function testSubscriptionWithExplicitInitialState(): void
     {
         $subscriptionId = SubscriptionId::generate();
-        $filter = new Filter();
 
-        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]), SubscriptionState::Active);
+        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]), SubscriptionState::Active);
 
-        $this->assertSame(SubscriptionState::Active, $this->connection->getSubscriptionState($subscriptionId));
+        $this->assertSame(SubscriptionState::Active, $connection->getSubscriptionState($subscriptionId));
     }
 
-    public function testUpdateSubscriptionState(): void
+    public function testWithSubscriptionStateAdvancesTheState(): void
     {
         $subscriptionId = SubscriptionId::generate();
-        $filter = new Filter();
 
-        $this->connection->addSubscription($subscriptionId, new FilterCollection([$filter]));
-        $this->assertSame(SubscriptionState::Pending, $this->connection->getSubscriptionState($subscriptionId));
+        $pending = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
+        $this->assertSame(SubscriptionState::Pending, $pending->getSubscriptionState($subscriptionId));
 
-        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active));
-        $this->assertSame(SubscriptionState::Active, $this->connection->getSubscriptionState($subscriptionId));
+        $active = $pending->withSubscriptionState($subscriptionId, SubscriptionState::Active);
+        $this->assertSame(SubscriptionState::Active, $active->getSubscriptionState($subscriptionId));
 
-        $this->assertTrue($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Live));
-        $this->assertSame(SubscriptionState::Live, $this->connection->getSubscriptionState($subscriptionId));
+        $live = $active->withSubscriptionState($subscriptionId, SubscriptionState::Live);
+        $this->assertSame(SubscriptionState::Live, $live->getSubscriptionState($subscriptionId));
     }
 
     public function testGetSubscriptionStateReturnsNullForUnknownSubscription(): void
@@ -135,24 +133,26 @@ final class RelayConnectionTest extends TestCase
         $this->assertNull($this->connection->getSubscriptionState($subscriptionId));
     }
 
-    public function testUpdateSubscriptionStateReturnsFalseForUnknownSubscription(): void
+    public function testWithSubscriptionStateIgnoresUnknownSubscription(): void
     {
         $subscriptionId = SubscriptionId::generate();
 
-        $this->assertFalse($this->connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active));
-        $this->assertNull($this->connection->getSubscriptionState($subscriptionId));
+        $connection = $this->connection->withSubscriptionState($subscriptionId, SubscriptionState::Active);
+
+        $this->assertNull($connection->getSubscriptionState($subscriptionId));
     }
 
-    public function testClearSubscriptions(): void
+    public function testWithoutSubscriptions(): void
     {
-        $this->connection->addSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]));
-        $this->connection->addSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]));
+        $connection = $this->connection
+            ->withSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]))
+            ->withSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]));
 
-        $this->assertSame(2, $this->connection->getSubscriptionCount());
+        $this->assertSame(2, $connection->getSubscriptionCount());
 
-        $this->connection->clearSubscriptions();
+        $cleared = $connection->withoutSubscriptions();
 
-        $this->assertSame(0, $this->connection->getSubscriptionCount());
-        $this->assertTrue($this->connection->getSubscriptions()->isEmpty());
+        $this->assertSame(0, $cleared->getSubscriptionCount());
+        $this->assertTrue($cleared->getSubscriptions()->isEmpty());
     }
 }

@@ -149,7 +149,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $connection = $this->connections[$urlString];
 
             if (ConnectionState::CONNECTED === $connection->getState()) {
-                $connection->updateState(ConnectionState::DISCONNECTING);
+                $connection = $connection->withState(ConnectionState::DISCONNECTING);
             }
 
             // Deliberate: bumping the generation on disconnect fences the outgoing message loop - see ADR-0008
@@ -171,7 +171,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $this->clearPendingForRelay($urlString);
 
             if (ConnectionState::DISCONNECTING === $connection->getState()) {
-                $connection->updateState(ConnectionState::DISCONNECTED);
+                $connection = $connection->withState(ConnectionState::DISCONNECTED);
             }
             unset($this->connections[$urlString]);
         }
@@ -187,9 +187,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, FilterCollection $filters, ?EventHandlerInterface $handler = null): void
     {
         $websocket = $this->getWebsocket($relayUrl);
+        $urlString = (string) $relayUrl;
 
-        $connection = $this->connections[(string) $relayUrl];
-        $connection->addSubscription($subscriptionId, $filters);
+        $connection = $this->connections[$urlString]->withSubscription($subscriptionId, $filters);
+        $this->connections[$urlString] = $connection;
 
         if (null !== $handler) {
             $this->subscriptionHandlers[$this->handlerKey($relayUrl, $subscriptionId)] = $handler;
@@ -199,13 +200,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         try {
             $websocket->sendText($message->toJson());
-            if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::Active)) {
-                $this->logger->debug('Attempted to update state of unknown subscription', [
-                    'relay' => (string) $relayUrl,
-                    'subscription_id' => (string) $subscriptionId,
-                    'target_state' => SubscriptionState::Active->value,
-                ]);
-            }
+            $this->connections[$urlString] = $connection->withSubscriptionState($subscriptionId, SubscriptionState::Active);
         } catch (Throwable $e) {
             $this->handleConnectionError($relayUrl, $e);
         }
@@ -220,8 +215,8 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
 
             $websocket = $this->getWebsocket($relayUrl);
-            $connection = $this->connections[(string) $relayUrl];
-            $connection->removeSubscription($subscriptionId);
+            $urlString = (string) $relayUrl;
+            $this->connections[$urlString] = $this->connections[$urlString]->withoutSubscription($subscriptionId);
             unset($this->subscriptionHandlers[$this->handlerKey($relayUrl, $subscriptionId)]);
 
             $message = new CloseMessage($subscriptionId);
@@ -530,19 +525,14 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     private function handleEoseMessage(RelayUrl $relayUrl, EoseMessage $message): void
     {
         $subscriptionId = $message->getSubscriptionId();
-        $connection = $this->connections[(string) $relayUrl] ?? null;
+        $urlString = (string) $relayUrl;
+        $connection = $this->connections[$urlString] ?? null;
 
         if (!$connection || !$connection->hasSubscription($subscriptionId)) {
             return;
         }
 
-        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::Live)) {
-            $this->logger->debug('Attempted to update state of unknown subscription', [
-                'relay' => (string) $relayUrl,
-                'subscription_id' => (string) $subscriptionId,
-                'target_state' => SubscriptionState::Live->value,
-            ]);
-        }
+        $this->connections[$urlString] = $connection->withSubscriptionState($subscriptionId, SubscriptionState::Live);
 
         $handler = $this->subscriptionHandlers[$this->handlerKey($relayUrl, $subscriptionId)] ?? null;
 
@@ -555,30 +545,23 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         $subscriptionId = $message->getSubscriptionId();
         $reason = $message->getMessage() ?: 'No reason provided';
-        $connection = $this->connections[(string) $relayUrl] ?? null;
+        $urlString = (string) $relayUrl;
+        $connection = $this->connections[$urlString] ?? null;
 
         if (!$connection || !$connection->hasSubscription($subscriptionId)) {
             return;
         }
 
-        if (!$connection->updateSubscriptionState($subscriptionId, SubscriptionState::ClosedByRelay)) {
-            $this->logger->debug('Attempted to update state of unknown subscription', [
-                'relay' => (string) $relayUrl,
-                'subscription_id' => (string) $subscriptionId,
-                'target_state' => SubscriptionState::ClosedByRelay->value,
-            ]);
-        }
-
         $key = $this->handlerKey($relayUrl, $subscriptionId);
         $handler = $this->subscriptionHandlers[$key] ?? null;
 
-        try {
-            if (null !== $handler) {
-                $handler->handleClosed($subscriptionId, $reason);
-            }
-        } finally {
-            $connection->removeSubscription($subscriptionId);
-            unset($this->subscriptionHandlers[$key]);
+        $this->connections[$urlString] = $connection
+            ->withSubscriptionState($subscriptionId, SubscriptionState::ClosedByRelay)
+            ->withoutSubscription($subscriptionId);
+        unset($this->subscriptionHandlers[$key]);
+
+        if (null !== $handler) {
+            $handler->handleClosed($subscriptionId, $reason);
         }
     }
 
@@ -678,11 +661,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         $connection = $this->connections[$urlString] ?? null;
 
-        if ($connection) {
-            $connection->updateState(ConnectionState::FAILED);
-
+        if (null !== $connection) {
             $activeSubscriptions = $connection->getSubscriptions();
-            $connection->clearSubscriptions();
+            $this->connections[$urlString] = $connection->withState(ConnectionState::FAILED)->withoutSubscriptions();
 
             foreach ($activeSubscriptions as $subscription) {
                 $subscriptionId = $subscription->getId();

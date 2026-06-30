@@ -13,7 +13,9 @@ use Innis\Nostr\Client\Tests\Support\ControllableWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\QueueWebsocketConnector;
+use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
+use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
@@ -85,6 +87,44 @@ final class AmphpRelayConnectionTest extends TestCase
         $connection->subscribe($relayUrl, $second, $filter, $handler);
 
         delay(0.1);
+    }
+
+    public function testSubscriptionAdvancesToLiveOnEoseThenIsRemovedOnClosed(): void
+    {
+        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($ws)),
+            new JsonMessageDeserialiser(),
+        );
+
+        $subscriptionId = SubscriptionId::fromString('sub-1');
+        self::assertNotNull($subscriptionId);
+        $filter = Filter::fromArray(['kinds' => [1]]);
+        self::assertNotNull($filter);
+
+        $handler = $this->createMock(EventHandlerInterface::class);
+        $handler->expects(self::once())->method('handleEose')->with($subscriptionId);
+        $handler->expects(self::once())->method('handleClosed')->with($subscriptionId, 'relay closed it');
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+        delay(0.01);
+
+        $connection->subscribe($relayUrl, $subscriptionId, $filter, $handler);
+        delay(0.01);
+        self::assertSame(SubscriptionState::Active, $connection->getConnection($relayUrl)?->getSubscriptionState($subscriptionId));
+
+        $ws->pushInbound('["EOSE","sub-1"]');
+        delay(0.01);
+        self::assertSame(SubscriptionState::Live, $connection->getConnection($relayUrl)->getSubscriptionState($subscriptionId));
+
+        $ws->pushInbound('["CLOSED","sub-1","relay closed it"]');
+        delay(0.01);
+        self::assertFalse($connection->getConnection($relayUrl)->hasSubscription($subscriptionId));
+
+        $connection->disconnect($relayUrl);
     }
 
     public function testSupersededMessageLoopDoesNotDisturbTheReplacementConnection(): void
