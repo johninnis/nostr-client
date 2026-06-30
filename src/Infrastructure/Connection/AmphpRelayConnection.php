@@ -713,13 +713,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $cancellation = $deferred->getCancellation();
 
         async(weakClosure(function () use ($relayUrl, $config, $cancellation, $urlString): void {
-            $initialMs = $config->getReconnectInitialDelayMs();
-            $maxMs = $config->getReconnectMaxDelayMs();
             $maxAttempts = $config->getReconnectMaxAttempts();
             $attempt = 0;
 
             while (0 === $maxAttempts || $attempt < $maxAttempts) {
-                $delayMs = (int) min($initialMs * (2 ** $attempt), $maxMs);
+                $delayMs = $config->baseBackoffMs($attempt);
                 $jitterMs = random_int(0, (int) ($delayMs * 0.25));
                 $totalSeconds = ($delayMs + $jitterMs) / 1000.0;
 

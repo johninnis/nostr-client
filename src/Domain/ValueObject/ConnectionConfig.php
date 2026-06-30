@@ -75,6 +75,11 @@ final readonly class ConnectionConfig
         return $this->reconnectMaxAttempts;
     }
 
+    public function baseBackoffMs(int $attempt): int
+    {
+        return (int) min($this->reconnectInitialDelayMs * (2 ** $attempt), $this->reconnectMaxDelayMs);
+    }
+
     public function withConnectionTimeout(int $seconds): self
     {
         return new self(

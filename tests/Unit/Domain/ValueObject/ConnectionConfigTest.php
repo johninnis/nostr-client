@@ -151,4 +151,24 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(0, $original->getReconnectMaxAttempts());
         $this->assertSame(3, $modified->getReconnectMaxAttempts());
     }
+
+    public function testBaseBackoffGrowsExponentially(): void
+    {
+        $config = new ConnectionConfig(reconnectInitialDelayMs: 100, reconnectMaxDelayMs: 60000);
+
+        $this->assertSame(100, $config->baseBackoffMs(0));
+        $this->assertSame(200, $config->baseBackoffMs(1));
+        $this->assertSame(400, $config->baseBackoffMs(2));
+        $this->assertSame(800, $config->baseBackoffMs(3));
+    }
+
+    public function testBaseBackoffIsCappedAtTheMaxDelay(): void
+    {
+        $config = new ConnectionConfig(reconnectInitialDelayMs: 100, reconnectMaxDelayMs: 500);
+
+        $this->assertSame(400, $config->baseBackoffMs(2));
+        $this->assertSame(500, $config->baseBackoffMs(3));
+        $this->assertSame(500, $config->baseBackoffMs(4));
+        $this->assertSame(500, $config->baseBackoffMs(1000));
+    }
 }
