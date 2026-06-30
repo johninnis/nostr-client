@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
+use Amp\Future;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\NostrClientInterface;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
@@ -31,6 +32,7 @@ use function Amp\Future\awaitAll;
 
 final class ConnectionManager implements NostrClientInterface
 {
+    /** @var array<string, Future<void>> */
     private array $connectionTasks = [];
 
     public function __construct(

@@ -54,13 +54,21 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
     private ?AuthChallengeHandlerInterface $authHandler = null;
     private ?ReconnectionListenerInterface $reconnectionListener = null;
+    /** @var array<string, RelayConnection> */
     private array $connections = [];
+    /** @var array<string, ActiveWebSocket> */
     private array $activeWebSockets = [];
+    /** @var array<string, DeferredFuture<bool>> */
     private array $pendingResponses = [];
+    /** @var array<string, int> */
     private array $connectionGenerations = [];
+    /** @var array<string, EventHandlerInterface> */
     private array $subscriptionHandlers = [];
+    /** @var array<string, list<ParkedPublish>> */
     private array $authRetryQueue = [];
+    /** @var array<string, Event> */
     private array $pendingEvents = [];
+    /** @var array<string, DeferredCancellation> */
     private array $reconnectCancellations = [];
 
     public function __construct(
@@ -89,7 +97,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
         $urlString = (string) $relayUrl;
         $authResponseKey = $urlString.':auth-event:'.$signedAuthEvent->getId()->toHex();
-        $this->pendingResponses[$authResponseKey] = new DeferredFuture();
+
+        $deferred = new DeferredFuture();
+        $deferred->getFuture()->ignore();
+        $this->pendingResponses[$authResponseKey] = $deferred;
 
         $message = new ClientAuthMessage($signedAuthEvent);
         $websocket->sendText($message->toJson());
@@ -108,7 +119,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         try {
-            $websocket = $this->connectionFactory->createConnection($relayUrl, $config)->await();
+            $websocket = $this->connectionFactory->createConnection($relayUrl, $config);
 
             $connection = new RelayConnection($relayUrl, ConnectionState::CONNECTED, $config);
             $this->connections[$urlString] = $connection;
@@ -141,11 +152,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 $connection->updateState(ConnectionState::DISCONNECTING);
             }
 
+            // Deliberate: bumping the generation on disconnect fences the outgoing message loop - see ADR-0008
             $this->connectionGenerations[$urlString] = ($this->connectionGenerations[$urlString] ?? 0) + 1;
 
             if (isset($this->activeWebSockets[$urlString])) {
                 try {
-                    $this->activeWebSockets[$urlString]->connection->close();
+                    $this->activeWebSockets[$urlString]->getConnection()->close();
                 } catch (Throwable $e) {
                     $this->logger->debug('Failed to close WebSocket during disconnect', [
                         'relay' => $urlString,
@@ -251,7 +263,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
         }
         foreach ($this->authRetryQueue[$urlString] ?? [] as $entry) {
-            $futures[] = $entry['deferred']->getFuture();
+            $futures[] = $entry->getDeferred()->getFuture();
         }
 
         if (empty($futures)) {
@@ -333,7 +345,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
         }))->ignore();
 
-        $this->activeWebSockets[$urlString] = new ActiveWebSocket($websocket, $task);
+        $this->activeWebSockets[$urlString] = new ActiveWebSocket($websocket);
     }
 
     private function handleMessage(RelayUrl $relayUrl, string $jsonMessage): void
@@ -456,6 +468,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         return true;
     }
 
+    /**
+     * @param DeferredFuture<bool> $deferred
+     */
     private function queueAuthRetry(RelayUrl $relayUrl, string $eventIdHex, DeferredFuture $deferred): void
     {
         $urlString = (string) $relayUrl;
@@ -464,10 +479,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $this->authRetryQueue[$urlString] = [];
         }
 
-        $this->authRetryQueue[$urlString][] = [
-            'event_id_hex' => $eventIdHex,
-            'deferred' => $deferred,
-        ];
+        $this->authRetryQueue[$urlString][] = new ParkedPublish($eventIdHex, $deferred);
     }
 
     private function flushAuthRetryQueue(RelayUrl $relayUrl): void
@@ -477,25 +489,24 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         unset($this->authRetryQueue[$urlString]);
 
         foreach ($queue as $entry) {
-            $eventKey = $urlString.':'.$entry['event_id_hex'];
+            $eventKey = $urlString.':'.$entry->getEventIdHex();
             $event = $this->pendingEvents[$eventKey] ?? null;
 
             if (null === $event) {
-                $entry['deferred']->error(
+                $entry->getDeferred()->error(
                     ConnectionException::forRelay($relayUrl, 'Auth retry failed: event no longer available')
                 );
                 continue;
             }
 
-            $responseKey = $urlString.':'.$entry['event_id_hex'];
-            $this->pendingResponses[$responseKey] = $entry['deferred'];
+            $this->pendingResponses[$eventKey] = $entry->getDeferred();
 
             try {
                 $websocket = $this->getWebsocket($relayUrl);
                 $websocket->sendText(new EventMessage($event)->toJson());
             } catch (Throwable $e) {
-                unset($this->pendingResponses[$responseKey], $this->pendingEvents[$eventKey]);
-                $entry['deferred']->error(
+                unset($this->pendingResponses[$eventKey], $this->pendingEvents[$eventKey]);
+                $entry->getDeferred()->error(
                     ConnectionException::forRelay($relayUrl, 'Auth retry failed: '.$e->getMessage())
                 );
             }
@@ -509,8 +520,8 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         unset($this->authRetryQueue[$urlString]);
 
         foreach ($queue as $entry) {
-            unset($this->pendingEvents[$urlString.':'.$entry['event_id_hex']]);
-            $entry['deferred']->error(
+            unset($this->pendingEvents[$urlString.':'.$entry->getEventIdHex()]);
+            $entry->getDeferred()->error(
                 ConnectionException::forRelay($relayUrl, 'Auth failed: '.$reason)
             );
         }
@@ -833,6 +844,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             throw ConnectionException::forRelay($relayUrl, 'Websocket not available');
         }
 
-        return $this->activeWebSockets[$urlString]->connection;
+        return $this->activeWebSockets[$urlString]->getConnection();
     }
 }

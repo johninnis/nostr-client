@@ -21,13 +21,13 @@ There are four states, and two facts about them invite a reviewer to "simplify" 
   is exactly what the reconnect loop brings back to `CONNECTED`.
 
 A third reviewer instinct points the other way — that a `CONNECTING` state is missing. Most connection
-state machines carry one, so its absence reads like an oversight. It is not. `connect()` resolves the
-WebSocket handshake synchronously from the entity's point of view: it awaits the handshake future and
-only constructs the `RelayConnection` once that future succeeds, born directly in `CONNECTED`. Before
-that point no entity exists to carry a state and no observer could read one; a handshake that fails
-throws at the boundary before any entity is created. The window a `CONNECTING` state would describe is
-the lifetime of an unresolved future, not the lifetime of an entity — unlike `DISCONNECTING`, which is a
-window on a connection that already exists.
+state machines carry one, so its absence reads like an oversight. It is not. `connect()` completes the
+WebSocket handshake as a single blocking step and only constructs the `RelayConnection` once that
+handshake succeeds, born directly in `CONNECTED`. Before that point no entity exists to carry a state
+and no observer could read one; a handshake that fails throws at the boundary before any entity is
+created. The window a `CONNECTING` state would describe is the lifetime of the in-progress handshake,
+not the lifetime of an entity — unlike `DISCONNECTING`, which is a window on a connection that already
+exists.
 
 ## Decision
 

@@ -8,6 +8,9 @@ use InvalidArgumentException;
 
 final readonly class ConnectionConfig
 {
+    /**
+     * @param array<string, string> $headers
+     */
     public function __construct(
         private int $connectionTimeoutSeconds = 10,
         private array $headers = [],
@@ -39,6 +42,9 @@ final readonly class ConnectionConfig
         return $this->connectionTimeoutSeconds;
     }
 
+    /**
+     * @return array<string, string>
+     */
     public function getHeaders(): array
     {
         return $this->headers;
@@ -82,6 +88,9 @@ final readonly class ConnectionConfig
         );
     }
 
+    /**
+     * @param array<string, string> $headers
+     */
     public function withHeaders(array $headers): self
     {
         return new self(

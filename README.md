@@ -38,11 +38,6 @@ A PHP client library for connecting to Nostr relays over WebSocket, subscribing 
 composer require innis/nostr-client
 ```
 
-`innis/nostr-client` depends on `innis/nostr-core`. In this repository that dependency is wired as a
-local path repository (`../nostr-core`, symlinked) and required as `@dev`, so the two packages are
-developed side by side. Installing the package outside that layout requires `innis/nostr-core` to be
-resolvable from a configured repository; it is not currently published to Packagist.
-
 ---
 
 ## Quick Start
@@ -52,9 +47,10 @@ resolvable from a configured repository; it is not currently published to Packag
 ```php
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
+use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Entity\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
@@ -74,7 +70,7 @@ $handler = new class implements EventHandlerInterface {
     public function handleNotice(RelayUrl $relayUrl, string $message): void {}
 };
 
-$filter = new Filter(kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)], limit: 10);
+$filter = new Filter(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10);
 $relay = RelayUrl::fromString('wss://relay.damus.io');
 
 $subscriptionId = $client->subscribe($relay, $filter, $handler);
@@ -119,13 +115,14 @@ foreach ($results as $result) {
 ### Multiple Filters Per Subscription
 
 ```php
-use Innis\Nostr\Core\Domain\Entity\FilterCollection;
+use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
+use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 
 $subscriptionId = $client->subscribeMultiple(
     $relay,
     new FilterCollection([
-        new Filter(kinds: [EventKind::fromInt(EventKind::TEXT_NOTE)], limit: 10),
-        new Filter(kinds: [EventKind::fromInt(EventKind::REACTION)], limit: 10),
+        new Filter(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10),
+        new Filter(kinds: EventKindCollection::fromInts([EventKind::REACTION]), limit: 10),
     ]),
     $handler,
 );
@@ -282,7 +279,7 @@ src/
     Connection/AmphpRelayConnection      WebSocket connection handler (AMPHP)
     Connection/ConnectionFactory         WebSocket connection creation
     Connection/ActiveWebSocket           Active WebSocket holder
-    Connection/WebsocketConnectionFuture Typed awaitable for a pending connection
+    Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
     Connection/ConnectionManager         Implements NostrClientInterface
     Connection/WebSocketHealthChecker    Standalone relay health checker
     Factory/NostrClientFactory           Dependency wiring

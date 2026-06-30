@@ -27,7 +27,7 @@ final class ConnectionFactoryTest extends TestCase
 
         $this->expectException(ConnectionException::class);
 
-        $this->factory->createConnection($relayUrl, $config)->await();
+        $this->factory->createConnection($relayUrl, $config);
     }
 
     public function testConnectionExceptionContainsRelayUrl(): void
@@ -37,7 +37,7 @@ final class ConnectionFactoryTest extends TestCase
         $config = new ConnectionConfig(connectionTimeoutSeconds: 1);
 
         try {
-            $this->factory->createConnection($relayUrl, $config)->await();
+            $this->factory->createConnection($relayUrl, $config);
             $this->fail('Expected ConnectionException');
         } catch (ConnectionException $e) {
             $this->assertSame($relayUrl, $e->getRelayUrl());
@@ -53,6 +53,6 @@ final class ConnectionFactoryTest extends TestCase
 
         $this->expectException(ConnectionException::class);
 
-        $this->factory->createConnection($relayUrl, $config)->await();
+        $this->factory->createConnection($relayUrl, $config);
     }
 }

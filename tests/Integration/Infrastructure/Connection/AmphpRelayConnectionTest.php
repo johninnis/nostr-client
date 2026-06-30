@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 
 use Amp\Websocket\WebsocketMessage;
+use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\ControllableWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
+use Innis\Nostr\Client\Tests\Support\QueueWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
@@ -82,5 +85,35 @@ final class AmphpRelayConnectionTest extends TestCase
         $connection->subscribe($relayUrl, $second, $filter, $handler);
 
         delay(0.1);
+    }
+
+    public function testSupersededMessageLoopDoesNotDisturbTheReplacementConnection(): void
+    {
+        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $stale = new ControllableWebsocketConnection();
+        $live = new ControllableWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new QueueWebsocketConnector([$stale, $live])),
+            new JsonMessageDeserialiser(),
+        );
+
+        $config = new ConnectionConfig(autoReconnect: false);
+
+        $connection->connect($relayUrl, $config);
+        delay(0.01);
+
+        $connection->disconnect($relayUrl);
+        $connection->connect($relayUrl, $config);
+        delay(0.01);
+
+        self::assertTrue($connection->isConnected($relayUrl));
+
+        $stale->simulateRemoteClose();
+        delay(0.01);
+
+        self::assertTrue($connection->isConnected($relayUrl));
+        self::assertSame(ConnectionState::CONNECTED, $connection->getConnection($relayUrl)?->getState());
     }
 }

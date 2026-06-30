@@ -45,6 +45,9 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(5, $config->getReconnectMaxAttempts());
     }
 
+    /**
+     * @param array<string, int> $params
+     */
     #[DataProvider('invalidValueProvider')]
     public function testConstructorThrowsOnInvalidValues(array $params, string $expectedMessage): void
     {
@@ -54,6 +57,9 @@ final class ConnectionConfigTest extends TestCase
         new ConnectionConfig(...$params);
     }
 
+    /**
+     * @return array<string, array{array<string, int>, string}>
+     */
     public static function invalidValueProvider(): array
     {
         return [

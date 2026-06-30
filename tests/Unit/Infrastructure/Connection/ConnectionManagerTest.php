@@ -12,8 +12,6 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
-use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
-use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResultCollection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionManager;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
@@ -29,6 +27,7 @@ use PHPUnit\Framework\TestCase;
 final class ConnectionManagerTest extends TestCase
 {
     private RelayUrl $relayUrl;
+    /** @var array<string, RelayConnection> */
     private array $handlerConnections = [];
 
     protected function setUp(): void
@@ -286,7 +285,7 @@ final class ConnectionManagerTest extends TestCase
 
         $subscriptionId = $manager->subscribe($this->relayUrl, $filter, $eventHandler);
 
-        $this->assertInstanceOf(SubscriptionId::class, $subscriptionId);
+        $this->assertNotSame('', (string) $subscriptionId);
     }
 
     public function testSubscribeWithExplicitId(): void
@@ -430,7 +429,6 @@ final class ConnectionManagerTest extends TestCase
 
         $this->assertCount(2, $results);
         foreach ($results as $result) {
-            $this->assertInstanceOf(HealthCheckResult::class, $result);
             $this->assertTrue($result->isHealthy());
         }
     }
@@ -620,7 +618,6 @@ final class ConnectionManagerTest extends TestCase
 
         $results = $manager->healthCheck();
 
-        $this->assertInstanceOf(HealthCheckResultCollection::class, $results);
         $this->assertCount(1, $results);
 
         foreach ($results as $result) {
@@ -636,7 +633,6 @@ final class ConnectionManagerTest extends TestCase
 
         $results = $manager->healthCheck();
 
-        $this->assertInstanceOf(HealthCheckResultCollection::class, $results);
         $this->assertTrue($results->isEmpty());
     }
 

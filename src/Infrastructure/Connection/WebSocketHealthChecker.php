@@ -35,7 +35,7 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
                 connectionTimeoutSeconds: (int) ceil($timeout)
             );
 
-            $websocket = $this->connectionFactory->createConnection($relayUrl, $config, $cancellation)->await();
+            $websocket = $this->connectionFactory->createConnection($relayUrl, $config, $cancellation);
             $websocket->close();
 
             $latencyMs = (microtime(true) - $startTime) * 1000;

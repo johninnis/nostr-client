@@ -71,7 +71,7 @@ $handler = new class($eventCount) implements EventHandlerInterface {
 };
 
 $filter = new Filter(
-    kinds: EventKindCollection::fromInts([EventKind::fromInt(EventKind::TEXT_NOTE)]),
+    kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]),
     limit: 50
 );
 

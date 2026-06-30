@@ -13,7 +13,6 @@ use Amp\Http\Client\HttpClientBuilder;
 use Amp\Http\Client\Request;
 use Amp\Http\Client\Response;
 use Amp\Socket\ConnectContext;
-use Amp\Socket\TlsException;
 use Amp\Websocket\Client\Rfc6455ConnectionFactory;
 use Amp\Websocket\Client\Rfc6455Connector;
 use Amp\Websocket\Client\WebsocketConnection;
@@ -27,8 +26,6 @@ use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Throwable;
 
-use function Amp\async;
-
 final class ConnectionFactory
 {
     private const int HEARTBEAT_PERIOD_SECONDS = 10;
@@ -37,41 +34,22 @@ final class ConnectionFactory
     private const int BYTES_PER_SECOND_LIMIT = 2 * 1024 * 1024;
     private const int FRAMES_PER_SECOND_LIMIT = 200;
 
-    private WebsocketConnector $connector;
+    private readonly WebsocketConnector $connector;
 
     public function __construct(?WebsocketConnector $connector = null)
     {
         $this->connector = $connector ?? self::createDefaultConnector();
     }
 
-    public function createConnection(RelayUrl $relayUrl, ConnectionConfig $config, ?Cancellation $cancellation = null): WebsocketConnectionFuture
+    public function createConnection(RelayUrl $relayUrl, ConnectionConfig $config, ?Cancellation $cancellation = null): WebsocketConnection
     {
-        return new WebsocketConnectionFuture(async(function () use ($relayUrl, $config, $cancellation): WebsocketConnection {
-            try {
-                $handshake = $this->createHandshake($relayUrl, $config);
+        try {
+            $handshake = $this->createHandshake($relayUrl, $config);
 
-                return $this->connector->connect($handshake, $cancellation);
-            } catch (Throwable $e) {
-                if ($this->isTlsError($e)) {
-                    $this->connector = self::createDefaultConnector();
-                }
-
-                throw ConnectionException::forRelay($relayUrl, 'Failed to establish WebSocket connection', $e);
-            }
-        }));
-    }
-
-    private function isTlsError(Throwable $e): bool
-    {
-        if ($e instanceof TlsException) {
-            return true;
+            return $this->connector->connect($handshake, $cancellation);
+        } catch (Throwable $e) {
+            throw ConnectionException::forRelay($relayUrl, 'Failed to establish WebSocket connection', $e);
         }
-
-        if (null !== $e->getPrevious()) {
-            return $this->isTlsError($e->getPrevious());
-        }
-
-        return str_contains($e->getMessage(), 'TLS negotiation failed');
     }
 
     private function createHandshake(RelayUrl $relayUrl, ConnectionConfig $config): WebsocketHandshake
@@ -79,7 +57,7 @@ final class ConnectionFactory
         $handshake = new WebsocketHandshake((string) $relayUrl);
 
         foreach ($config->getHeaders() as $name => $value) {
-            if (is_string($name) && '' !== $name) {
+            if ('' !== $name) {
                 $handshake = $handshake->withHeader($name, $value);
             }
         }

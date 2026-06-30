@@ -10,12 +10,11 @@ use PHPUnit\Framework\TestCase;
 
 final class ConnectionStateTest extends TestCase
 {
-    public function testEnumValues(): void
+    public function testEveryCaseRoundTripsThroughItsBackingValue(): void
     {
-        $this->assertSame('disconnected', ConnectionState::DISCONNECTED->value);
-        $this->assertSame('connected', ConnectionState::CONNECTED->value);
-        $this->assertSame('disconnecting', ConnectionState::DISCONNECTING->value);
-        $this->assertSame('failed', ConnectionState::FAILED->value);
+        foreach (ConnectionState::cases() as $state) {
+            $this->assertSame($state, ConnectionState::from($state->value));
+        }
     }
 
     public function testIsConnected(): void
@@ -32,6 +31,9 @@ final class ConnectionStateTest extends TestCase
         $this->assertTrue($from->canTransitionTo($to));
     }
 
+    /**
+     * @return array<string, array{ConnectionState, ConnectionState}>
+     */
     public static function validTransitionProvider(): array
     {
         return [
@@ -50,6 +52,9 @@ final class ConnectionStateTest extends TestCase
         $this->assertFalse($from->canTransitionTo($to));
     }
 
+    /**
+     * @return array<string, array{ConnectionState, ConnectionState}>
+     */
     public static function invalidTransitionProvider(): array
     {
         return [
