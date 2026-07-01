@@ -116,6 +116,32 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         $connection->disconnect($relayUrl);
     }
 
+    public function testAuthRequiredPublishIsRejectedWhenNoAuthHandlerRegistered(): void
+    {
+        $relayUrl = $this->relayUrl();
+        $event = $this->textNote();
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($ws)),
+            new JsonMessageDeserialiser(),
+        );
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+        delay(0.01);
+
+        $future = $connection->publishEvent($relayUrl, $event);
+        delay(0.01);
+
+        $ws->pushInbound(sprintf('["OK","%s",false,"auth-required: please authenticate"]', $event->getId()->toHex()));
+
+        $result = $future->await();
+        self::assertFalse($result->isAccepted(), 'without an auth handler an auth-required publish resolves as rejected, never hangs');
+        self::assertStringContainsString('auth-required', $result->getMessage());
+        self::assertSame(1, self::countFrames($ws, 'EVENT'), 'a publish that cannot be authenticated is never retransmitted');
+
+        $connection->disconnect($relayUrl);
+    }
+
     private function connect(ScriptedWebsocketConnection $ws, RelayUrl $relayUrl, Event $authEvent): AmphpRelayConnection
     {
         $connection = new AmphpRelayConnection(

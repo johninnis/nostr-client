@@ -190,7 +190,7 @@ Register a listener to re-establish per-connection state (re-subscribe, re-authe
 dropped connection is restored. The listener fires only on a successful reconnect.
 
 ```php
-use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
+use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 
 $listener = new class implements ReconnectionListenerInterface {
@@ -221,7 +221,7 @@ $client->awaitPendingPublishes($relay, timeoutSeconds: 5.0);
 Register an auth handler to sign relay challenges. When `publishEvent()` is rejected with `auth-required`, the client completes the challenge-response flow and retransmits the queued event transparently.
 
 ```php
-use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 
@@ -290,8 +290,11 @@ This package follows Clean Architecture principles:
 ```
 src/
   Application/
-    Port/NostrClientInterface        Public API contract
-    Port/ConnectionHandlerInterface  Infrastructure port
+    Port/NostrClientInterface            Public API contract
+    Port/ConnectionHandlerInterface      Infrastructure port
+    Port/AuthChallengeHandlerInterface   NIP-42 auth callback (application provides)
+    Port/ReconnectionListenerInterface   Reconnect-succeeded callback (application provides)
+    Port/RelayHealthCheckerInterface     Standalone health check contract
   Domain/
     Collection/RelayConnectionCollection     Typed connection collection
     Collection/HealthCheckResultCollection   Typed health result collection
@@ -300,9 +303,6 @@ src/
     ValueObject/ConnectionConfig         Connection configuration
     ValueObject/HealthCheckResult        Health check outcome
     ValueObject/PublishResult            Relay accept/reject verdict on a publish
-    Service/AuthChallengeHandlerInterface    NIP-42 auth callback (application provides)
-    Service/ReconnectionListenerInterface    Reconnect-succeeded callback (application provides)
-    Service/RelayHealthCheckerInterface      Standalone health check contract
     Exception/ClientException            Base exception (extends NostrException)
     Exception/ConnectionException        Connection-specific errors
   Infrastructure/

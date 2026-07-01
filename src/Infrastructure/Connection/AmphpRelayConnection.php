@@ -87,23 +87,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     }
 
     #[Override]
-    public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
-    {
-        $eventIdHex = $signedAuthEvent->getId()->toHex();
-        $session = $this->requireSession($relayUrl);
-        $websocket = $session->getWebsocket();
-        $session->markPendingAuth($eventIdHex);
-
-        try {
-            $websocket->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
-        } catch (Throwable $e) {
-            $session->clearPendingAuth($eventIdHex);
-
-            throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
-        }
-    }
-
-    #[Override]
     public function connect(RelayUrl $relayUrl, ConnectionConfig $config): void
     {
         $urlString = (string) $relayUrl;
@@ -315,6 +298,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             try {
                 foreach ($websocket as $message) {
                     $payload = $message->buffer();
+                    // Deliberate: dispatch each frame on a detached fiber so a slow handler cannot stall the reader - see ADR-0011
                     async(weakClosure(function () use ($relayUrl, $payload): void {
                         $this->handleMessage($relayUrl, $payload);
                     }))->ignore();
@@ -432,6 +416,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $session->removePendingResponse($eventIdHex);
 
         if ($message->isAuthRequired()) {
+            if (null === $this->authHandler) {
+                $session->removePendingEvent($eventIdHex);
+                $future->complete(PublishResult::rejected($message->getMessage()));
+
+                return;
+            }
+
             $session->parkPublish(new ParkedPublish($eventIdHex, $future));
 
             return;
@@ -599,6 +590,22 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 'relay' => (string) $relayUrl,
                 'error' => $e->getMessage(),
             ]);
+        }
+    }
+
+    private function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
+    {
+        $eventIdHex = $signedAuthEvent->getId()->toHex();
+        $session = $this->requireSession($relayUrl);
+        $websocket = $session->getWebsocket();
+        $session->markPendingAuth($eventIdHex);
+
+        try {
+            $websocket->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
+        } catch (Throwable $e) {
+            $session->clearPendingAuth($eventIdHex);
+
+            throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
         }
     }
 
