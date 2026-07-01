@@ -5,15 +5,15 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\Future;
+use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\NostrClientInterface;
+use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
-use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
-use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;

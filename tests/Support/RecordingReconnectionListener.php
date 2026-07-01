@@ -6,7 +6,7 @@ namespace Innis\Nostr\Client\Tests\Support;
 
 use Amp\DeferredFuture;
 use Amp\TimeoutCancellation;
-use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
+use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Override;
 

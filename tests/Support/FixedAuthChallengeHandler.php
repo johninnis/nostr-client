@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Tests\Support;
 
-use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Override;

@@ -7,8 +7,6 @@ namespace Innis\Nostr\Client\Application\Port;
 use Amp\Future;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
-use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
-use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;

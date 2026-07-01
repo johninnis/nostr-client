@@ -9,13 +9,13 @@ use Amp\DeferredCancellation;
 use Amp\Future;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
+use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
+use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
-use Innis\Nostr\Client\Domain\Service\AuthChallengeHandlerInterface;
-use Innis\Nostr\Client\Domain\Service\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
@@ -88,10 +88,18 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
     {
+        $eventIdHex = $signedAuthEvent->getId()->toHex();
         $session = $this->requireSession($relayUrl);
-        $session->markPendingAuth($signedAuthEvent->getId()->toHex());
+        $websocket = $session->getWebsocket();
+        $session->markPendingAuth($eventIdHex);
 
-        $session->getWebsocket()->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
+        try {
+            $websocket->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
+        } catch (Throwable $e) {
+            $session->clearPendingAuth($eventIdHex);
+
+            throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
+        }
     }
 
     #[Override]
@@ -209,12 +217,17 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function publishEvent(RelayUrl $relayUrl, Event $event): Future
     {
         $session = $this->requireSession($relayUrl);
+        $websocket = $session->getWebsocket();
         $eventIdHex = $event->getId()->toHex();
 
         $session->setPendingEvent($eventIdHex, $event);
         $future = $session->trackPublish($eventIdHex);
 
-        $session->getWebsocket()->sendText(new EventMessage($event)->toJson());
+        try {
+            $websocket->sendText(new EventMessage($event)->toJson());
+        } catch (Throwable $e) {
+            $this->handleConnectionError($relayUrl, $e);
+        }
 
         return $future;
     }
@@ -250,7 +263,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function ping(RelayUrl $relayUrl): void
     {
-        $this->requireSession($relayUrl)->getWebsocket()->ping();
+        $websocket = $this->requireSession($relayUrl)->getWebsocket();
+
+        try {
+            $websocket->ping();
+        } catch (Throwable $e) {
+            throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
+        }
     }
 
     #[Override]
@@ -593,6 +612,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $session = $this->sessions[$urlString] ?? null;
 
         if (null === $session) {
+            return;
+        }
+
+        if (ConnectionState::FAILED === $session->getConnection()->getState()) {
             return;
         }
 

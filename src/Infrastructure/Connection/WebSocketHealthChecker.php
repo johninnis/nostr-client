@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\TimeoutCancellation;
-use Innis\Nostr\Client\Domain\Service\RelayHealthCheckerInterface;
+use Innis\Nostr\Client\Application\Port\RelayHealthCheckerInterface;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Domain\Service;
+namespace Innis\Nostr\Client\Application\Port;
 
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
