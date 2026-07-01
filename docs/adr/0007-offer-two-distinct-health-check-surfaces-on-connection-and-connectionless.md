@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 "Is this relay healthy?" has two genuinely different meanings, and a single health check cannot answer
-both. A reviewer seeing two health-check code paths — `ConnectionManager::healthCheck()` and the
+both. A reviewer seeing two health-check code paths — `MultiRelayNostrClient::healthCheck()` and the
 standalone `WebSocketHealthChecker` reached through a separate factory method — is tempted to read one
 as a duplicate of the other and merge them. The temptation comes from the one thing they do share: both
 report a `HealthCheckResult`. That shared result type is deliberate vocabulary, not evidence of a
@@ -49,7 +49,7 @@ terms of the other without a caller lying: a no-argument call has no way to name
 and a single-`RelayUrl` call has no way to mean "all my live ones".
 
 The connectionless checker is a separate object reached by a separate factory method precisely because
-its lifecycle is different: it is constructed and used without a `ConnectionManager`, and it owns no
+its lifecycle is different: it is constructed and used without a `MultiRelayNostrClient`, and it owns no
 connections.
 
 ## Consequences

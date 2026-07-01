@@ -18,7 +18,7 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\Nip11Info;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Infrastructure\Crypto\NativeRandomBytesGenerator;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
-use Innis\Nostr\Relay\Application\Service\AuthenticationManager;
+use Innis\Nostr\Relay\Application\Service\InMemoryAuthenticationRegistry;
 use Innis\Nostr\Relay\Application\Service\RelayPolicy;
 use Innis\Nostr\Relay\Domain\ValueObject\RateLimitConfig;
 use Innis\Nostr\Relay\Domain\ValueObject\RelayPolicyConfig;
@@ -83,7 +83,7 @@ final class RelayRoundTripSmokeTest extends TestCase
     {
         $config = new LoopbackRelayConfig();
         $logger = new NullLogger();
-        $authManager = new AuthenticationManager(new NativeRandomBytesGenerator());
+        $authManager = new InMemoryAuthenticationRegistry(new NativeRandomBytesGenerator());
         $policyConfig = RelayPolicyConfig::fromArray([]) ?? self::fail('invalid relay policy configuration');
 
         $relay = new RelayServerFactory(

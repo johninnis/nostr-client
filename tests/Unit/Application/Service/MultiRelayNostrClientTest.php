@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Tests\Unit\Infrastructure\Connection;
+namespace Innis\Nostr\Client\Tests\Unit\Application\Service;
 
 use Amp\Future;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
+use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
-use Innis\Nostr\Client\Infrastructure\Connection\ConnectionManager;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
@@ -26,7 +26,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
-final class ConnectionManagerTest extends TestCase
+final class MultiRelayNostrClientTest extends TestCase
 {
     private RelayUrl $relayUrl;
     /** @var array<string, RelayConnection> */
@@ -82,7 +82,7 @@ final class ConnectionManagerTest extends TestCase
     public function testConnectCreatesNewConnection(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
@@ -102,7 +102,7 @@ final class ConnectionManagerTest extends TestCase
     public function testConnectWithDefaultConfig(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, new ConnectionConfig());
 
         $handler
@@ -119,7 +119,7 @@ final class ConnectionManagerTest extends TestCase
     public function testConnectReturnsExistingHealthyConnection(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
@@ -139,7 +139,7 @@ final class ConnectionManagerTest extends TestCase
     public function testConnectThrowsOnFailure(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $exception = new ConnectionException('Connection failed');
 
@@ -157,7 +157,7 @@ final class ConnectionManagerTest extends TestCase
     public function testConnectRecordsFailureWhenConnectionExists(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $exception = new ConnectionException('Connection failed');
@@ -185,7 +185,7 @@ final class ConnectionManagerTest extends TestCase
     public function testDisconnectRemovesConnection(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $handler
@@ -205,7 +205,7 @@ final class ConnectionManagerTest extends TestCase
     public function testDisconnectUnsubscribesAll(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $subscriptionId = SubscriptionId::fromString('test-sub');
@@ -239,7 +239,7 @@ final class ConnectionManagerTest extends TestCase
     public function testReconnectDisconnectsAndReconnects(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $handler
@@ -264,7 +264,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSubscribeEnsuresConnection(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $filter = new Filter();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
 
@@ -277,7 +277,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSubscribeReturnsGeneratedSubscriptionId(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $filter = new Filter();
@@ -295,7 +295,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSubscribeWithExplicitId(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $filter = new Filter();
@@ -315,7 +315,7 @@ final class ConnectionManagerTest extends TestCase
     public function testUnsubscribeRemovesSubscription(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $connection = $this->establishConnection();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
 
@@ -328,7 +328,7 @@ final class ConnectionManagerTest extends TestCase
     public function testPublishEventEnsuresConnection(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $pubkey = PublicKey::fromHex(str_pad('1', 64, '0', STR_PAD_LEFT));
         self::assertNotNull($pubkey);
         $event = EventFactory::createTextNote($pubkey, 'Test event');
@@ -342,7 +342,7 @@ final class ConnectionManagerTest extends TestCase
     public function testPublishEventDelegatesToHandlerWhenConnected(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $pubkey = PublicKey::fromHex('abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234');
@@ -363,7 +363,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetConnectedRelays(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $connectedRelays = $manager->getConnectedRelays();
@@ -374,7 +374,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetConnectedRelaysReturnsEmptyWhenNoConnections(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $result = $manager->getConnectedRelays();
         $this->assertTrue($result->isEmpty());
@@ -383,7 +383,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetConnectionStatusReturnsDisconnectedForUnknownRelay(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $status = $manager->getConnectionStatus($this->relayUrl);
         $this->assertSame(ConnectionState::DISCONNECTED, $status);
@@ -392,7 +392,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetConnectionStatusReturnsCorrectState(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $status = $manager->getConnectionStatus($this->relayUrl);
@@ -402,7 +402,7 @@ final class ConnectionManagerTest extends TestCase
     public function testCloseDisconnectsAll(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $handler
@@ -421,7 +421,7 @@ final class ConnectionManagerTest extends TestCase
     public function testHealthCheckRunsOnAllConnections(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $relay2 = RelayUrl::fromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
@@ -443,7 +443,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetAllConnections(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $connection = $this->establishConnection();
 
         $connections = $manager->getAllConnections();
@@ -455,7 +455,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSetAuthHandlerDelegatesToConnectionHandler(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $authHandler = $this->createStub(AuthChallengeHandlerInterface::class);
 
         $handler
@@ -469,7 +469,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSetReconnectionListenerDelegatesToConnectionHandler(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $listener = $this->createStub(ReconnectionListenerInterface::class);
 
         $handler
@@ -483,7 +483,7 @@ final class ConnectionManagerTest extends TestCase
     public function testPingDelegatesToConnectionHandler(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $handler
@@ -497,7 +497,7 @@ final class ConnectionManagerTest extends TestCase
     public function testPingEnsuresConnection(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
@@ -508,7 +508,7 @@ final class ConnectionManagerTest extends TestCase
     public function testReconnectWithUnknownRelayUsesDefaultConfig(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $handler
             ->method('disconnect')
@@ -530,7 +530,7 @@ final class ConnectionManagerTest extends TestCase
     public function testReconnectPreservesExistingConfig(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig(connectionTimeoutSeconds: 30);
 
         $connectConfigs = [];
@@ -557,7 +557,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSubscribeMultipleEnsuresConnection(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $eventHandler = $this->createStub(EventHandlerInterface::class);
 
         $this->expectException(ConnectionException::class);
@@ -569,7 +569,7 @@ final class ConnectionManagerTest extends TestCase
     public function testSubscribeMultipleDelegatesToHandler(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
         $filters = new FilterCollection([new Filter(), new Filter()]);
@@ -589,7 +589,7 @@ final class ConnectionManagerTest extends TestCase
     public function testUnsubscribeEnsuresConnection(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $subscriptionId = SubscriptionId::fromString('sub-1');
         self::assertNotNull($subscriptionId);
@@ -603,7 +603,7 @@ final class ConnectionManagerTest extends TestCase
     public function testDisconnectOnUnknownRelayIsNoop(): void
     {
         $handler = $this->createHandlerMock();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $handler
             ->expects($this->never())
@@ -615,7 +615,7 @@ final class ConnectionManagerTest extends TestCase
     public function testHealthCheckReturnsFailureOnPingError(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $this->handlerConnections[(string) $this->relayUrl] = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
 
@@ -636,7 +636,7 @@ final class ConnectionManagerTest extends TestCase
     public function testHealthCheckReturnsEmptyForNoConnections(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
 
         $results = $manager->healthCheck();
 
@@ -646,7 +646,7 @@ final class ConnectionManagerTest extends TestCase
     public function testGetConnectedRelaysExcludesUnhealthyConnections(): void
     {
         $handler = $this->createHandlerStub();
-        $manager = new ConnectionManager($handler);
+        $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $healthyConnection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
         $relay2 = RelayUrl::fromString('wss://relay2.example.com');

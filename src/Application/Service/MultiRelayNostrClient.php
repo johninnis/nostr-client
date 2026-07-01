@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Infrastructure\Connection;
+namespace Innis\Nostr\Client\Application\Service;
 
 use Amp\Future;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
-use Innis\Nostr\Client\Application\Port\NostrClientInterface;
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
@@ -31,7 +30,7 @@ use Throwable;
 use function Amp\async;
 use function Amp\Future\awaitAll;
 
-final class ConnectionManager implements NostrClientInterface
+final class MultiRelayNostrClient implements NostrClientInterface
 {
     /** @var array<string, Future<void>> */
     private array $connectionTasks = [];

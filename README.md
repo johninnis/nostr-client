@@ -290,8 +290,9 @@ This package follows Clean Architecture principles:
 ```
 src/
   Application/
-    Port/NostrClientInterface            Public API contract
-    Port/ConnectionHandlerInterface      Infrastructure port
+    Service/NostrClientInterface         Public API contract (driving)
+    Service/MultiRelayNostrClient        Orchestrates many relays; implements NostrClientInterface
+    Port/ConnectionHandlerInterface      Driven transport port (AmphpRelayConnection implements)
     Port/AuthChallengeHandlerInterface   NIP-42 auth callback (application provides)
     Port/ReconnectionListenerInterface   Reconnect-succeeded callback (application provides)
     Port/RelayHealthCheckerInterface     Standalone health check contract
@@ -310,7 +311,6 @@ src/
     Connection/ConnectionFactory         WebSocket connection creation
     Connection/RelaySession              Per-relay live state (socket, handlers, pending)
     Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
-    Connection/ConnectionManager         Implements NostrClientInterface
     Connection/WebSocketHealthChecker    Standalone relay health checker
     Factory/NostrClientFactory           Dependency wiring
 ```

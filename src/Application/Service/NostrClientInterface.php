@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Innis\Nostr\Client\Application\Port;
+namespace Innis\Nostr\Client\Application\Service;
 
 use Amp\Future;
+use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
