@@ -7,6 +7,7 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 use Amp\CancelledException;
 use Amp\DeferredCancellation;
 use Amp\Future;
+use Amp\Pipeline\Queue;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
@@ -52,6 +53,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
     private const string APPLICATION_PING_NOTICE = 'ping';
     private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
+    private const int MAX_INBOUND_BACKLOG = 1024;
 
     // Deliberate: optional observer hooks registered after construction, not constructor-injected - see ADR-0010
     private ?AuthChallengeHandlerInterface $authHandler = null;
@@ -294,14 +296,27 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         $urlString = (string) $relayUrl;
 
-        $task = async(weakClosure(function () use ($relayUrl, $websocket, $urlString, $generation) {
+        /** @var Queue<string> $inbound */
+        $inbound = new Queue(self::MAX_INBOUND_BACKLOG);
+
+        // Deliberate: one ordered dispatch fiber drains the queue so a slow handler blocks only itself, never the socket reader - see ADR-0011
+        async(weakClosure(function () use ($relayUrl, $inbound): void {
+            foreach ($inbound->iterate() as $payload) {
+                $this->handleMessage($relayUrl, $payload);
+            }
+        }))->ignore();
+
+        $task = async(weakClosure(function () use ($relayUrl, $websocket, $urlString, $generation, $inbound) {
             try {
                 foreach ($websocket as $message) {
-                    $payload = $message->buffer();
-                    // Deliberate: dispatch each frame on a detached fiber so a slow handler cannot stall the reader - see ADR-0011
-                    async(weakClosure(function () use ($relayUrl, $payload): void {
-                        $this->handleMessage($relayUrl, $payload);
-                    }))->ignore();
+                    // Deliberate: a full buffer means the consumer is MAX_INBOUND_BACKLOG behind - fail the connection rather than grow unbounded or stall the reader - see ADR-0011
+                    $accepted = $inbound->pushAsync($message->buffer());
+
+                    if (!$accepted->isComplete()) {
+                        $accepted->ignore();
+
+                        throw new RuntimeException('Inbound message backlog exceeded; consumer too slow');
+                    }
                 }
 
                 if (($this->connectionGenerations[$urlString] ?? 0) === $generation) {
@@ -316,6 +331,8 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     return;
                 }
                 $this->handleConnectionError($relayUrl, $e, $generation);
+            } finally {
+                $inbound->complete();
             }
         }));
 
