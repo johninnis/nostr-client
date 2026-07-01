@@ -20,6 +20,7 @@
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95",
+        "innis/nostr-relay": "dev-master",
         "phpstan/phpstan": "~2.2.2",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^13.1",
