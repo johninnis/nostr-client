@@ -416,6 +416,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $session->removePendingResponse($eventIdHex);
 
         if ($message->isAuthRequired()) {
+            // Deliberate: with no handler the challenge can never be signed, so return the relay's rejection rather than park it forever - see ADR-0004
             if (null === $this->authHandler) {
                 $session->removePendingEvent($eventIdHex);
                 $future->complete(PublishResult::rejected($message->getMessage()));
