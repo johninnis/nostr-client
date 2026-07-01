@@ -109,8 +109,9 @@ outcome carried in the `PublishResult`; only a broken connection throws.
 
 ### Health Checking
 
-`healthCheck()` pings every currently connected relay over its existing connection and reports per-relay
-latency or failure. To probe a relay you are not connected to, use the standalone health checker below.
+`healthCheck()` pings every currently connected relay over its existing connection and reports whether
+each is still reachable. To probe a relay you are not connected to, use the standalone health checker
+below.
 
 ```php
 $results = $client->healthCheck();
@@ -118,7 +119,7 @@ $results = $client->healthCheck();
 foreach ($results as $result) {
     $relayUrl = $result->getRelayUrl();
     if ($result->isHealthy()) {
-        echo "{$relayUrl}: {$result->getLatencyMs()}ms\n";
+        echo "{$relayUrl}: reachable\n";
     } else {
         echo "{$relayUrl}: {$result->getErrorMessage()}\n";
     }

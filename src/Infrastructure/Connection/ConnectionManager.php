@@ -207,12 +207,10 @@ final class ConnectionManager implements NostrClientInterface
         foreach ($this->connectionHandler->getAllConnections() as $connection) {
             $relayUrl = $connection->getRelayUrl();
             $healthTasks[] = async(function () use ($relayUrl) {
-                $startTime = microtime(true);
                 try {
                     $this->ping($relayUrl);
-                    $latencyMs = (microtime(true) - $startTime) * 1000;
 
-                    return HealthCheckResult::success($relayUrl, $latencyMs);
+                    return HealthCheckResult::success($relayUrl);
                 } catch (Throwable $e) {
                     return HealthCheckResult::failure($relayUrl, $e->getMessage());
                 }

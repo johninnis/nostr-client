@@ -26,7 +26,6 @@ final class WebSocketHealthCheckerTest extends TestCase
         $result = $this->healthChecker->checkHealth($relayUrl, 1.0);
 
         $this->assertFalse($result->isHealthy());
-        $this->assertNull($result->getLatencyMs());
         $this->assertNotNull($result->getErrorMessage());
     }
 

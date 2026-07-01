@@ -11,27 +11,18 @@ final readonly class HealthCheckResult
     private function __construct(
         private RelayUrl $relayUrl,
         private bool $isHealthy,
-        private ?float $latencyMs = null,
         private ?string $errorMessage = null,
     ) {
     }
 
-    public static function success(RelayUrl $relayUrl, float $latencyMs): self
+    public static function success(RelayUrl $relayUrl): self
     {
-        return new self(
-            relayUrl: $relayUrl,
-            isHealthy: true,
-            latencyMs: $latencyMs,
-        );
+        return new self($relayUrl, true);
     }
 
     public static function failure(RelayUrl $relayUrl, string $errorMessage): self
     {
-        return new self(
-            relayUrl: $relayUrl,
-            isHealthy: false,
-            errorMessage: $errorMessage,
-        );
+        return new self($relayUrl, false, $errorMessage);
     }
 
     public function getRelayUrl(): RelayUrl
@@ -42,11 +33,6 @@ final readonly class HealthCheckResult
     public function isHealthy(): bool
     {
         return $this->isHealthy;
-    }
-
-    public function getLatencyMs(): ?float
-    {
-        return $this->latencyMs;
     }
 
     public function getErrorMessage(): ?string

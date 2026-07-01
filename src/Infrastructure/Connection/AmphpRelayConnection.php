@@ -53,6 +53,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     private const string APPLICATION_PING_NOTICE = 'ping';
     private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
 
+    // Deliberate: optional observer hooks registered after construction, not constructor-injected - see ADR-0010
     private ?AuthChallengeHandlerInterface $authHandler = null;
     private ?ReconnectionListenerInterface $reconnectionListener = null;
     /** @var array<string, RelaySession> */

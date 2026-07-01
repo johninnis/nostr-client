@@ -13,9 +13,9 @@ as a duplicate of the other and merge them. The temptation comes from the one th
 report a `HealthCheckResult`. That shared result type is deliberate vocabulary, not evidence of a
 duplicated operation — they are two different probes that happen to speak the same result.
 
-- During a session the question is *"are the connections I already hold still alive, and how fast?"*
-  Answering that by opening a fresh socket would measure the wrong thing (a brand-new connection, not
-  the live one) and would churn connections the client is actively using.
+- During a session the question is *"are the connections I already hold still alive?"* Answering that by
+  opening a fresh socket would measure the wrong thing (a brand-new connection, not the live one) and
+  would churn connections the client is actively using.
 - Before or without a session the question is *"can I reach this relay at all?"* — for example to pick
   relays from a candidate list, or to probe one the client is not connected to. Answering that needs a
   connection the client does not yet have, and the probe must not leave a connection behind.
@@ -25,13 +25,20 @@ duplicated operation — they are two different probes that happen to speak the 
 The two questions are served by two surfaces with different lifecycles.
 
 - **Over live connections.** `NostrClientInterface::healthCheck()` pings every relay the client is
-  currently connected to, concurrently, and reports per-relay latency or failure. It reuses the
-  existing socket and measures the real connection. It checks only relays already connected — it never
+  currently connected to, concurrently, and reports whether each is still reachable. It reuses the
+  existing socket and probes the real connection. It checks only relays already connected — it never
   opens one.
 - **Connectionless.** `RelayHealthCheckerInterface` (implemented by `WebSocketHealthChecker`, built via
   `NostrClientFactory::createHealthChecker()`) opens a fresh WebSocket to a single relay under a
-  timeout, records the round-trip, and closes it immediately. It needs no `NostrClientInterface` and
-  holds no long-lived state, so it can probe a relay the client has no relationship with.
+  timeout and closes it immediately. It needs no `NostrClientInterface` and holds no long-lived state,
+  so it can probe a relay the client has no relationship with.
+
+Both surfaces report **reachability, not latency.** A `HealthCheckResult` carries the relay, a
+healthy/unhealthy verdict, and a failure reason — no timing. The live check cannot honestly measure
+round-trip latency: a WebSocket `ping` returns as soon as its frame is written, and the matching `pong`
+is consumed by the transport's own heartbeat, so nothing surfaces to correlate the round-trip against.
+Reporting the write time as a `latencyMs` would hand back a number that reads like round-trip latency
+and is not one, so no timing is reported at all rather than a misleading one.
 
 The signatures make the split concrete. `healthCheck()` takes no argument and returns a
 `HealthCheckResultCollection`: it cannot name a target because its target *is* "every relay I already
@@ -54,6 +61,6 @@ connections.
   standalone checker would measure a throwaway socket instead of the real one and churn live
   connections; routing the probe through `healthCheck()` is impossible, as there is no connection to
   ping.
-- The standalone checker always leaves the relay in the state it found it: it opens, measures, and
+- The standalone checker always leaves the relay in the state it found it: it opens, probes, and
   closes. Its result is a `HealthCheckResult` value, matching the per-relay results returned by
   `healthCheck()`.

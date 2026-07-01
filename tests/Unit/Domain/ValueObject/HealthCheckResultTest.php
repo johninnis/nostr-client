@@ -21,11 +21,10 @@ final class HealthCheckResultTest extends TestCase
 
     public function testSuccessCreatesHealthyResult(): void
     {
-        $result = HealthCheckResult::success($this->relayUrl, 42.5);
+        $result = HealthCheckResult::success($this->relayUrl);
 
         $this->assertSame($this->relayUrl, $result->getRelayUrl());
         $this->assertTrue($result->isHealthy());
-        $this->assertSame(42.5, $result->getLatencyMs());
         $this->assertNull($result->getErrorMessage());
     }
 
@@ -35,7 +34,6 @@ final class HealthCheckResultTest extends TestCase
 
         $this->assertSame($this->relayUrl, $result->getRelayUrl());
         $this->assertFalse($result->isHealthy());
-        $this->assertNull($result->getLatencyMs());
         $this->assertSame('Connection refused', $result->getErrorMessage());
     }
 }

@@ -27,8 +27,6 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
     #[Override]
     public function checkHealth(RelayUrl $relayUrl, float $timeout = self::DEFAULT_TIMEOUT_SECONDS): HealthCheckResult
     {
-        $startTime = microtime(true);
-
         try {
             $cancellation = new TimeoutCancellation($timeout);
             $config = new ConnectionConfig(
@@ -38,21 +36,17 @@ final class WebSocketHealthChecker implements RelayHealthCheckerInterface
             $websocket = $this->connectionFactory->createConnection($relayUrl, $config, $cancellation);
             $websocket->close();
 
-            $latencyMs = (microtime(true) - $startTime) * 1000;
-
             $this->logger->debug('Relay health check succeeded', [
                 'relay' => (string) $relayUrl,
-                'latency_ms' => round($latencyMs, 2),
             ]);
 
-            return HealthCheckResult::success($relayUrl, $latencyMs);
+            return HealthCheckResult::success($relayUrl);
         } catch (Throwable $e) {
             $errorMessage = $e->getMessage();
 
             $this->logger->debug('Relay health check failed', [
                 'relay' => (string) $relayUrl,
                 'error' => $errorMessage,
-                'duration_ms' => round((microtime(true) - $startTime) * 1000, 2),
             ]);
 
             return HealthCheckResult::failure($relayUrl, $errorMessage);

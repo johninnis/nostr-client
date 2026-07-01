@@ -39,7 +39,7 @@ final class HealthCheckResultCollectionTest extends TestCase
 
     public function testHoldsResults(): void
     {
-        $result = HealthCheckResult::success($this->relayUrl, 42.5);
+        $result = HealthCheckResult::success($this->relayUrl);
         $collection = new HealthCheckResultCollection([$result]);
 
         $this->assertSame(1, $collection->count());
@@ -50,7 +50,7 @@ final class HealthCheckResultCollectionTest extends TestCase
     {
         $relay2 = RelayUrl::fromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
-        $success = HealthCheckResult::success($this->relayUrl, 10.0);
+        $success = HealthCheckResult::success($this->relayUrl);
         $failure = HealthCheckResult::failure($relay2, 'Connection refused');
         $collection = new HealthCheckResultCollection([$success, $failure]);
 
