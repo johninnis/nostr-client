@@ -39,6 +39,7 @@ interface NostrClientInterface
 
     public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void;
 
+    // Deliberate: relay target, filter, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     public function subscribe(
         RelayUrl $relay,
         Filter $filter,
@@ -46,6 +47,7 @@ interface NostrClientInterface
         ?SubscriptionId $subscriptionId = null,
     ): SubscriptionId;
 
+    // Deliberate: relay target, filters, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     public function subscribeMultiple(
         RelayUrl $relay,
         FilterCollection $filters,

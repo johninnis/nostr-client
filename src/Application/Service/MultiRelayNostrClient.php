@@ -117,6 +117,7 @@ final class MultiRelayNostrClient implements NostrClientInterface
         $this->connect($relay, $config);
     }
 
+    // Deliberate: relay target, filter, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     #[Override]
     public function subscribe(
         RelayUrl $relay,
@@ -131,6 +132,7 @@ final class MultiRelayNostrClient implements NostrClientInterface
         return $subscriptionId;
     }
 
+    // Deliberate: relay target, filters, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     #[Override]
     public function subscribeMultiple(
         RelayUrl $relay,

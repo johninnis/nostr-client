@@ -26,8 +26,10 @@ interface ConnectionHandlerInterface
 
     public function disconnect(RelayUrl $relayUrl): void;
 
+    // Deliberate: relay target, correlation id, filter and optional handler sink are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     public function subscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId, Filter $filter, ?EventHandlerInterface $handler = null): void;
 
+    // Deliberate: relay target, correlation id, filters and optional handler sink are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, FilterCollection $filters, ?EventHandlerInterface $handler = null): void;
 
     public function unsubscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId): void;

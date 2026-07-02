@@ -23,21 +23,21 @@ declare(strict_types=1);
 require __DIR__.'/../vendor/autoload.php';
 
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
-use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SuppliedWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
-use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 use Innis\Nostr\Core\Infrastructure\Encoding\JsonMessageDeserialiser;
 
@@ -114,7 +114,7 @@ $connector = new SuppliedWebsocketConnector(static function () use (&$hostileFra
         for ($frame = 0; $frame < $burst; ++$frame) {
             try {
                 $socket->pushInbound($hostileFrame($currentSubscriptionId));
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 return; // stream closed by the client
             }
 
@@ -126,7 +126,7 @@ $connector = new SuppliedWebsocketConnector(static function () use (&$hostileFra
         if ($shouldDrop) {
             try {
                 $socket->close();
-            } catch (\Throwable) {
+            } catch (Throwable) {
             }
         }
     })->ignore();
@@ -145,6 +145,7 @@ $client->setAuthHandler(new class($keyPair, $signer) implements AuthChallengeHan
     ) {
     }
 
+    #[Override]
     public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
     {
         // Half the time decline, to exercise both the retry-flush and the no-signed-event paths.
@@ -161,19 +162,23 @@ $handler = new class implements EventHandlerInterface {
     public int $events = 0;
     public int $notices = 0;
 
+    #[Override]
     public function handleEvent(Event $event, SubscriptionId $subscriptionId): void
     {
         ++$this->events;
     }
 
+    #[Override]
     public function handleEose(SubscriptionId $subscriptionId): void
     {
     }
 
+    #[Override]
     public function handleClosed(SubscriptionId $subscriptionId, string $message): void
     {
     }
 
+    #[Override]
     public function handleNotice(RelayUrl $relayUrl, string $message): void
     {
         ++$this->notices;
@@ -252,7 +257,7 @@ for ($step = 0; $step < $iterations; ++$step) {
         }
     } catch (ConnectionException) {
         ++$connectionExceptions;
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         $violations[] = [
             'iteration' => $step,
             'operation' => $operation,

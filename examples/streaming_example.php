@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 require_once __DIR__.'/../vendor/autoload.php';
 
-use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
+use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
@@ -23,7 +23,7 @@ $relays = [
 $connectedRelays = [];
 foreach ($relays as $url) {
     $relay = RelayUrl::fromString($url);
-    if ($relay === null) {
+    if (null === $relay) {
         echo "Invalid relay URL: {$url}\n";
         continue;
     }
@@ -31,12 +31,12 @@ foreach ($relays as $url) {
         $client->connect($relay);
         $connectedRelays[] = $relay;
         echo "Connected to: {$url}\n";
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         echo "Failed to connect to {$url}: {$e->getMessage()}\n";
     }
 }
 
-if ($connectedRelays === []) {
+if ([] === $connectedRelays) {
     echo "No relays available\n";
     exit(1);
 }
@@ -48,22 +48,26 @@ $handler = new class($eventCount) implements EventHandlerInterface {
     {
     }
 
+    #[Override]
     public function handleEvent(Event $event, SubscriptionId $subscriptionId): void
     {
         ++$this->eventCount;
         echo '[EVENT] '.substr((string) $event->getContent(), 0, 80)."\n";
     }
 
+    #[Override]
     public function handleEose(SubscriptionId $subscriptionId): void
     {
         echo "[EOSE] End of stored events for: {$subscriptionId}\n";
     }
 
+    #[Override]
     public function handleClosed(SubscriptionId $subscriptionId, string $message): void
     {
         echo "[CLOSED] Subscription {$subscriptionId}: {$message}\n";
     }
 
+    #[Override]
     public function handleNotice(RelayUrl $relayUrl, string $message): void
     {
         echo "[NOTICE] {$relayUrl}: {$message}\n";

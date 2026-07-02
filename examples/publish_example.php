@@ -27,14 +27,14 @@ $relays = [
 
 foreach ($relays as $url) {
     $relay = RelayUrl::fromString($url);
-    if ($relay === null) {
+    if (null === $relay) {
         echo "Invalid relay URL: {$url}\n";
         continue;
     }
 
     try {
         $client->connect($relay);
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         echo "{$url}: failed to connect ({$e->getMessage()})\n";
         continue;
     }
@@ -47,7 +47,7 @@ foreach ($relays as $url) {
         } else {
             echo "{$url}: rejected ({$result->getMessage()})\n";
         }
-    } catch (\Throwable $e) {
+    } catch (Throwable $e) {
         echo "{$url}: connection fault ({$e->getMessage()})\n";
     }
 }

@@ -14,13 +14,13 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use InvalidArgumentException;
 
-final class RelayConnection
+final readonly class RelayConnection
 {
     public function __construct(
-        private readonly RelayUrl $relayUrl,
-        private readonly ConnectionState $state,
-        private readonly ConnectionConfig $config,
-        private readonly SubscriptionCollection $subscriptions = new SubscriptionCollection(),
+        private RelayUrl $relayUrl,
+        private ConnectionState $state,
+        private ConnectionConfig $config,
+        private SubscriptionCollection $subscriptions = new SubscriptionCollection(),
     ) {
     }
 

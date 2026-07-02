@@ -24,6 +24,7 @@ use Amp\Websocket\PeriodicHeartbeatQueue;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Override;
 use Throwable;
 
 final class ConnectionFactory
@@ -81,6 +82,7 @@ final class ConnectionFactory
                 )
             )
             ->intercept(new class implements ApplicationInterceptor {
+                #[Override]
                 public function request(
                     Request $request,
                     Cancellation $cancellation,

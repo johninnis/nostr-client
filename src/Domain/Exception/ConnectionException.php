@@ -9,6 +9,7 @@ use Throwable;
 
 final class ConnectionException extends ClientException
 {
+    // Deliberate: the (message, code, previous) triple is fixed by the \Exception contract; relayUrl is the domain field that makes the fault diagnosable. Nothing to decompose.
     public function __construct(
         string $message = '',
         int $code = 0,
