@@ -9,13 +9,12 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SendFailingWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SuppliedWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
-use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -80,7 +79,7 @@ final class ConnectionFuzzTest extends TestCase
                     'disconnect' => $connection->disconnect($relay),
                     'subscribe' => $connection->subscribe($relay, $lastSubscriptionId = SubscriptionId::generate(), new Filter(), $this->noopHandler()),
                     'unsubscribe' => null !== $lastSubscriptionId ? $connection->unsubscribe($relay, $lastSubscriptionId) : null,
-                    'publish' => $connection->publishEvent($relay, $this->textNote())->ignore(),
+                    'publish' => $connection->publishEvent($relay, EventMother::textNote())->ignore(),
                     'ping' => $connection->ping($relay),
                     'drop' => $this->dropRandomSocket($sockets),
                     default => null,
@@ -127,14 +126,6 @@ final class ConnectionFuzzTest extends TestCase
         self::assertNotNull($relayUrl);
 
         return $relayUrl;
-    }
-
-    private function textNote(): Event
-    {
-        $pubkey = PublicKey::fromHex(str_repeat('a', 64));
-        self::assertNotNull($pubkey);
-
-        return EventFactory::createTextNote($pubkey, 'hello nostr');
     }
 
     private function noopHandler(): EventHandlerInterface

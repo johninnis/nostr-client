@@ -9,13 +9,11 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SendFailingWebsocketConnection;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
-use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
-use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -29,7 +27,7 @@ final class AmphpRelayConnectionPublishTest extends TestCase
     public function testPublishResolvesAcceptedWhenTheRelayStoresTheEvent(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
+        $event = EventMother::textNote();
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl);
@@ -49,7 +47,7 @@ final class AmphpRelayConnectionPublishTest extends TestCase
     public function testPublishResolvesRejectedWhenTheRelayDeclinesTheEvent(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
+        $event = EventMother::textNote();
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl);
@@ -69,7 +67,7 @@ final class AmphpRelayConnectionPublishTest extends TestCase
     public function testPublishErrorsTheFutureWithAConnectionExceptionWhenTheSendFails(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
+        $event = EventMother::textNote();
 
         $ws = new SendFailingWebsocketConnection();
         $connection = new AmphpRelayConnection(
@@ -97,7 +95,7 @@ final class AmphpRelayConnectionPublishTest extends TestCase
     public function testAConnectionErrorOnAnAlreadyFailedConnectionIsHandledIdempotently(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
+        $event = EventMother::textNote();
 
         $ws = new SendFailingWebsocketConnection();
         $connection = new AmphpRelayConnection(
@@ -138,13 +136,5 @@ final class AmphpRelayConnectionPublishTest extends TestCase
         self::assertNotNull($relayUrl);
 
         return $relayUrl;
-    }
-
-    private function textNote(): Event
-    {
-        $pubkey = PublicKey::fromHex(str_repeat('a', 64));
-        self::assertNotNull($pubkey);
-
-        return EventFactory::createTextNote($pubkey, 'hello nostr');
     }
 }

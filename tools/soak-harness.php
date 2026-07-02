@@ -32,7 +32,7 @@ use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SuppliedWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
@@ -153,7 +153,7 @@ $client->setAuthHandler(new class($keyPair, $signer) implements AuthChallengeHan
             return null;
         }
 
-        return EventFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge)
+        return RumourFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge)
             ->sign($this->keyPair, $this->signer);
     }
 });
@@ -242,7 +242,7 @@ for ($step = 0; $step < $iterations; ++$step) {
                 }
                 break;
             case 'publish':
-                $note = EventFactory::createTextNote($keyPair->getPublicKey(), 'soak note')->sign($keyPair, $signer);
+                $note = RumourFactory::createTextNote($keyPair->getPublicKey(), 'soak note')->sign($keyPair, $signer);
                 $client->publishEvent($relay, $note)->ignore();
                 break;
             case 'ping':

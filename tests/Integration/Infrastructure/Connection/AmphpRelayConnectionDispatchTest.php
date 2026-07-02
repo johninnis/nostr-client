@@ -9,11 +9,13 @@ use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\EventMessage as RelayEventMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use Innis\Nostr\Core\Infrastructure\Encoding\JsonMessageDeserialiser;
@@ -172,13 +174,9 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
 
     private function eventFrame(string $subscriptionId, int $seq): string
     {
-        return sprintf(
-            '["EVENT","%s",{"id":"%s","pubkey":"%s","created_at":%d,"kind":1,"tags":[],"content":"msg-%d"}]',
-            $subscriptionId,
-            str_pad(dechex($seq), 64, '0', STR_PAD_LEFT),
-            str_repeat('a', 64),
-            1_700_000_000 + $seq,
-            $seq,
-        );
+        $subId = SubscriptionId::fromString($subscriptionId);
+        self::assertNotNull($subId);
+
+        return new RelayEventMessage($subId, EventMother::textNote('msg-'.$seq))->toJson();
     }
 }

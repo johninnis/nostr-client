@@ -15,10 +15,9 @@ use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
-use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -329,9 +328,7 @@ final class MultiRelayNostrClientTest extends TestCase
     {
         $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
-        $pubkey = PublicKey::fromHex(str_pad('1', 64, '0', STR_PAD_LEFT));
-        self::assertNotNull($pubkey);
-        $event = EventFactory::createTextNote($pubkey, 'Test event');
+        $event = EventMother::textNote('Test event');
 
         $this->expectException(ConnectionException::class);
         $this->expectExceptionMessage('Not connected');
@@ -345,9 +342,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
-        $pubkey = PublicKey::fromHex('abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234');
-        self::assertNotNull($pubkey);
-        $event = EventFactory::createTextNote($pubkey, 'Test event content');
+        $event = EventMother::textNote('Test event content');
 
         $handler
             ->expects($this->once())

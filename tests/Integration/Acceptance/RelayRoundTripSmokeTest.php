@@ -10,7 +10,7 @@ use Innis\Nostr\Client\Tests\Support\InMemoryRelayEventStore;
 use Innis\Nostr\Client\Tests\Support\LoopbackRelayConfig;
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Collection\PublicKeyCollection;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
@@ -58,7 +58,7 @@ final class RelayRoundTripSmokeTest extends TestCase
 
             $signer = Secp256k1Signer::create();
             $keyPair = KeyPair::generate($signer);
-            $event = EventFactory::createTextNote($keyPair->getPublicKey(), 'nostr-client smoke test')->sign($keyPair, $signer);
+            $event = RumourFactory::createTextNote($keyPair->getPublicKey(), 'nostr-client smoke test')->sign($keyPair, $signer);
 
             $publish = $client->publishEvent($relayUrl, $event)->await();
             self::assertTrue($publish->isAccepted(), 'the relay accepted the event: '.$publish->getMessage());

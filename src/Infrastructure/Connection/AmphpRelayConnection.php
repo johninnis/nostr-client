@@ -596,10 +596,10 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         try {
-            $signedEvent = $this->authHandler->handleAuthChallenge($relayUrl, $message->getChallenge());
+            $authEvent = $this->authHandler->handleAuthChallenge($relayUrl, $message->getChallenge());
 
-            if (null !== $signedEvent) {
-                $this->sendAuth($relayUrl, $signedEvent);
+            if (null !== $authEvent) {
+                $this->sendAuth($relayUrl, $authEvent);
 
                 $this->logger->debug('AUTH response sent', [
                     'relay' => (string) $relayUrl,
@@ -613,15 +613,15 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
     }
 
-    private function sendAuth(RelayUrl $relayUrl, Event $signedAuthEvent): void
+    private function sendAuth(RelayUrl $relayUrl, Event $authEvent): void
     {
-        $eventIdHex = $signedAuthEvent->getId()->toHex();
+        $eventIdHex = $authEvent->getId()->toHex();
         $session = $this->requireSession($relayUrl);
         $websocket = $session->getWebsocket();
         $session->markPendingAuth($eventIdHex);
 
         try {
-            $websocket->sendText(new ClientAuthMessage($signedAuthEvent)->toJson());
+            $websocket->sendText(new ClientAuthMessage($authEvent)->toJson());
         } catch (Throwable $e) {
             $session->clearPendingAuth($eventIdHex);
 

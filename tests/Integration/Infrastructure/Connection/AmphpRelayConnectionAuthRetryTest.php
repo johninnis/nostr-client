@@ -7,12 +7,11 @@ namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\FixedAuthChallengeHandler;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
-use Innis\Nostr\Core\Domain\ValueObject\Identity\PublicKey;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Infrastructure\Encoding\JsonMessageDeserialiser;
 use PHPUnit\Framework\TestCase;
@@ -27,8 +26,8 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAuthRequiredPublishIsParkedAndRetransmittedAfterAuthAccepted(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
-        $authEvent = EventFactory::createAuth($event->getPubkey(), $relayUrl, self::CHALLENGE);
+        $event = EventMother::textNote();
+        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -58,8 +57,8 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAuthRejectedDoesNotRetransmitTheParkedPublish(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
-        $authEvent = EventFactory::createAuth($event->getPubkey(), $relayUrl, self::CHALLENGE);
+        $event = EventMother::textNote();
+        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -86,8 +85,8 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAwaitPendingPublishesBlocksUntilAnAuthParkedPublishResolves(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
-        $authEvent = EventFactory::createAuth($event->getPubkey(), $relayUrl, self::CHALLENGE);
+        $event = EventMother::textNote();
+        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -119,7 +118,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAuthRequiredPublishIsRejectedWhenNoAuthHandlerRegistered(): void
     {
         $relayUrl = $this->relayUrl();
-        $event = $this->textNote();
+        $event = EventMother::textNote();
 
         $ws = new ScriptedWebsocketConnection();
         $connection = new AmphpRelayConnection(
@@ -162,14 +161,6 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         self::assertNotNull($relayUrl);
 
         return $relayUrl;
-    }
-
-    private function textNote(): Event
-    {
-        $pubkey = PublicKey::fromHex(str_repeat('a', 64));
-        self::assertNotNull($pubkey);
-
-        return EventFactory::createTextNote($pubkey, 'hello nostr');
     }
 
     private static function countFrames(ScriptedWebsocketConnection $ws, string $type): int
