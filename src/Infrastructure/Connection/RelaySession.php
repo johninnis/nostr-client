@@ -12,6 +12,7 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\ClientMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
 /**
@@ -66,6 +67,11 @@ final class RelaySession
         }
 
         return $this->websocket;
+    }
+
+    public function send(ClientMessage $message): void
+    {
+        $this->getWebsocket()->sendText($message->toJson());
     }
 
     public function loseWebsocket(): void

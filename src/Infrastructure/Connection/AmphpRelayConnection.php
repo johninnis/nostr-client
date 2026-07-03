@@ -25,19 +25,11 @@ use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
 use Innis\Nostr\Core\Domain\Service\MessageDeserialiserInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\AuthMessage as ClientAuthMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\ReqMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\AuthMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\ClosedMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\EoseMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\EventMessage as RelayEventMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\NoticeMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\OkMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
-use InvalidArgumentException;
 use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -51,35 +43,43 @@ use function Amp\weakClosure;
 
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
-    private const string APPLICATION_PING_NOTICE = 'ping';
-    private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
     private const int MAX_INBOUND_BACKLOG = 1024;
 
-    // Deliberate: optional observer hooks registered after construction, not constructor-injected - see ADR-0010
-    private ?AuthChallengeHandlerInterface $authHandler = null;
+    // Deliberate: the optional reconnection listener is registered after construction, not constructor-injected - see ADR-0010
     private ?ReconnectionListenerInterface $reconnectionListener = null;
-    /** @var array<string, RelaySession> */
-    private array $sessions = [];
-    // Kept apart from the session: a monotonic per-relay counter that must outlive
-    // any single connection so a superseded message loop can be fenced - see ADR-0008.
-    /** @var array<string, int> */
-    private array $connectionGenerations = [];
-    // Kept apart from the session: it exists during the reconnect window, when there
-    // is deliberately no session for the relay.
-    /** @var array<string, DeferredCancellation> */
-    private array $reconnectCancellations = [];
+    private readonly RelaySessionRegistry $registry;
+    private readonly InboundMessageDispatcher $dispatcher;
+    private readonly ConnectionErrorHandler $errorHandler;
+    private readonly OkMessageHandler $okHandler;
+    private readonly AuthMessageHandler $authMessageHandler;
 
     public function __construct(
         private readonly ConnectionFactory $connectionFactory,
-        private readonly MessageDeserialiserInterface $deserialiser,
+        MessageDeserialiserInterface $deserialiser,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
+        $this->registry = new RelaySessionRegistry();
+        $this->errorHandler = new ConnectionErrorHandler($this->registry, $this->logger);
+        $this->okHandler = new OkMessageHandler();
+        $this->authMessageHandler = new AuthMessageHandler($this->logger);
+        $this->dispatcher = new InboundMessageDispatcher(
+            $deserialiser,
+            $this->logger,
+            new EventMessageHandler($this->logger),
+            $this->okHandler,
+            new EoseMessageHandler(),
+            new ClosedMessageHandler(),
+            new NoticeMessageHandler($this->logger),
+            $this->authMessageHandler,
+        );
     }
 
+    // Deliberate: the auth handler is registered after construction, not constructor-injected - see ADR-0010
     #[Override]
     public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
     {
-        $this->authHandler = $handler;
+        $this->okHandler->setAuthHandler($handler);
+        $this->authMessageHandler->setAuthHandler($handler);
     }
 
     #[Override]
@@ -91,9 +91,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function connect(RelayUrl $relayUrl, ConnectionConfig $config): void
     {
-        $urlString = (string) $relayUrl;
-
-        $existing = $this->sessions[$urlString] ?? null;
+        $existing = $this->registry->find($relayUrl);
         if (null !== $existing && $existing->getConnection()->isHealthy()) {
             return;
         }
@@ -102,10 +100,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $websocket = $this->connectionFactory->createConnection($relayUrl, $config);
 
             $connection = new RelayConnection($relayUrl, ConnectionState::CONNECTED, $config);
-            $this->sessions[$urlString] = new RelaySession($connection, $websocket);
+            $this->registry->store($relayUrl, new RelaySession($connection, $websocket));
 
-            $generation = ($this->connectionGenerations[$urlString] ?? 0) + 1;
-            $this->connectionGenerations[$urlString] = $generation;
+            $generation = $this->registry->nextGeneration($relayUrl);
 
             $this->startMessageHandler($relayUrl, $websocket, $generation);
         } catch (ConnectionException $e) {
@@ -120,12 +117,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         $urlString = (string) $relayUrl;
 
-        if (isset($this->reconnectCancellations[$urlString])) {
-            $this->reconnectCancellations[$urlString]->cancel();
-            unset($this->reconnectCancellations[$urlString]);
-        }
+        $this->registry->cancelReconnect($relayUrl);
 
-        $session = $this->sessions[$urlString] ?? null;
+        $session = $this->registry->find($relayUrl);
         if (null === $session) {
             return;
         }
@@ -135,7 +129,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         // Deliberate: bumping the generation on disconnect fences the outgoing message loop - see ADR-0008
-        $this->connectionGenerations[$urlString] = ($this->connectionGenerations[$urlString] ?? 0) + 1;
+        $this->registry->nextGeneration($relayUrl);
 
         try {
             $session->getWebsocket()->close();
@@ -147,7 +141,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         // Dropping the session releases its handlers, pending responses, events and auth queue.
-        unset($this->sessions[$urlString]);
+        $this->registry->remove($relayUrl);
     }
 
     // Deliberate: relay target, correlation id, filter and optional handler sink are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
@@ -169,7 +163,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         try {
-            $session->getWebsocket()->sendText(new ReqMessage($subscriptionId, $filters)->toJson());
+            $session->send(new ReqMessage($subscriptionId, $filters));
             $session->setConnection($session->getConnection()->withSubscriptionState($subscriptionId, SubscriptionState::Active));
         } catch (Throwable $e) {
             $this->handleConnectionError($relayUrl, $e);
@@ -188,7 +182,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $session->setConnection($session->getConnection()->withoutSubscription($subscriptionId));
             $session->removeHandler($subscriptionId);
 
-            $session->getWebsocket()->sendText(new CloseMessage($subscriptionId)->toJson());
+            $session->send(new CloseMessage($subscriptionId));
         } catch (Throwable $e) {
             $this->logger->warning('Failed to unsubscribe', [
                 'relay' => (string) $relayUrl,
@@ -205,14 +199,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function publishEvent(RelayUrl $relayUrl, Event $event): Future
     {
         $session = $this->requireSession($relayUrl);
-        $websocket = $session->getWebsocket();
         $eventIdHex = $event->getId()->toHex();
 
         $session->setPendingEvent($eventIdHex, $event);
         $future = $session->trackPublish($eventIdHex);
 
         try {
-            $websocket->sendText(new EventMessage($event)->toJson());
+            $session->send(new EventMessage($event));
         } catch (Throwable $e) {
             $this->handleConnectionError($relayUrl, $e);
         }
@@ -223,7 +216,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void
     {
-        $session = $this->sessions[(string) $relayUrl] ?? null;
+        $session = $this->registry->find($relayUrl);
         if (null === $session) {
             return;
         }
@@ -271,7 +264,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function getConnection(RelayUrl $relayUrl): ?RelayConnection
     {
-        return ($this->sessions[(string) $relayUrl] ?? null)?->getConnection();
+        return $this->registry->find($relayUrl)?->getConnection();
     }
 
     #[Override]
@@ -279,13 +272,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         return new RelayConnectionCollection(array_map(
             static fn (RelaySession $session): RelayConnection => $session->getConnection(),
-            array_values($this->sessions),
+            $this->registry->all(),
         ));
     }
 
     private function requireSession(RelayUrl $relayUrl): RelaySession
     {
-        $session = $this->sessions[(string) $relayUrl] ?? null;
+        $session = $this->registry->find($relayUrl);
 
         if (null === $session) {
             throw ConnectionException::forRelay($relayUrl, 'Websocket not available');
@@ -296,8 +289,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
     private function startMessageHandler(RelayUrl $relayUrl, WebsocketConnection $websocket, int $generation): void
     {
-        $urlString = (string) $relayUrl;
-
         /** @var Queue<string> $inbound */
         $inbound = new Queue(self::MAX_INBOUND_BACKLOG);
 
@@ -308,7 +299,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
         }))->ignore();
 
-        $task = async(weakClosure(function () use ($relayUrl, $websocket, $urlString, $generation, $inbound) {
+        $task = async(weakClosure(function () use ($relayUrl, $websocket, $generation, $inbound) {
             try {
                 foreach ($websocket as $message) {
                     // Deliberate: a full buffer means the consumer is MAX_INBOUND_BACKLOG behind - fail the connection rather than grow unbounded or stall the reader - see ADR-0011
@@ -321,7 +312,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     }
                 }
 
-                if (($this->connectionGenerations[$urlString] ?? 0) === $generation) {
+                if ($this->registry->generation($relayUrl) === $generation) {
                     $this->handleConnectionError(
                         $relayUrl,
                         new RuntimeException('WebSocket closed by remote'),
@@ -329,7 +320,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     );
                 }
             } catch (Throwable $e) {
-                if (($this->connectionGenerations[$urlString] ?? 0) !== $generation) {
+                if ($this->registry->generation($relayUrl) !== $generation) {
                     return;
                 }
                 $this->handleConnectionError($relayUrl, $e, $generation);
@@ -338,9 +329,9 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             }
         }));
 
-        $task->catch(weakClosure(function (Throwable $e) use ($relayUrl, $urlString, $generation) {
+        $task->catch(weakClosure(function (Throwable $e) use ($relayUrl, $generation) {
             try {
-                if (($this->connectionGenerations[$urlString] ?? 0) === $generation) {
+                if ($this->registry->generation($relayUrl) === $generation) {
                     $this->handleConnectionError($relayUrl, $e, $generation);
                 }
             } catch (Throwable $e) {
@@ -354,334 +345,21 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
     private function handleMessage(RelayUrl $relayUrl, string $jsonMessage): void
     {
-        $session = $this->sessions[(string) $relayUrl] ?? null;
+        $session = $this->registry->find($relayUrl);
 
         if (null === $session) {
             return;
         }
 
-        try {
-            $message = $this->deserialiser->deserialiseRelayMessage($jsonMessage);
-
-            if (null === $message) {
-                $this->logger->warning('Unknown or malformed relay message', [
-                    'relay' => (string) $relayUrl,
-                ]);
-
-                return;
-            }
-
-            match (true) {
-                $message instanceof RelayEventMessage => $this->handleEventMessage($relayUrl, $session, $message),
-                $message instanceof OkMessage => $this->handleOkMessage($relayUrl, $session, $message),
-                $message instanceof EoseMessage => $this->handleEoseMessage($session, $message),
-                $message instanceof ClosedMessage => $this->handleClosedMessage($session, $message),
-                $message instanceof NoticeMessage => $this->handleNoticeMessage($relayUrl, $session, $message),
-                $message instanceof AuthMessage => $this->handleAuthMessage($relayUrl, $message),
-                default => $this->logger->warning('Unhandled relay message type', [
-                    'relay' => (string) $relayUrl,
-                    'message_type' => $message->getType(),
-                ]),
-            };
-        } catch (InvalidArgumentException $e) {
-            $this->logger->warning('Unknown or malformed relay message', [
-                'relay' => (string) $relayUrl,
-                'error' => $e->getMessage(),
-            ]);
-        } catch (Throwable $e) {
-            $this->logger->error('Failed to handle relay message', [
-                'relay' => (string) $relayUrl,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function handleEventMessage(RelayUrl $relayUrl, RelaySession $session, RelayEventMessage $message): void
-    {
-        $subscriptionId = $message->getSubscriptionId();
-
-        if (!$session->getConnection()->hasSubscription($subscriptionId)) {
-            return;
-        }
-
-        try {
-            $handler = $session->getHandler($subscriptionId);
-
-            if (null !== $handler) {
-                $handler->handleEvent($message->getEvent(), $subscriptionId);
-            }
-        } catch (Throwable $e) {
-            $this->logger->error('Failed to process event message', [
-                'relay' => (string) $relayUrl,
-                'subscription_id' => (string) $subscriptionId,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function handleOkMessage(RelayUrl $relayUrl, RelaySession $session, OkMessage $message): void
-    {
-        if ($this->isAuthOkResponse($relayUrl, $session, $message)) {
-            return;
-        }
-
-        $eventIdHex = $message->getEventId()->toHex();
-        $future = $session->getPendingResponse($eventIdHex);
-
-        if (null === $future) {
-            return;
-        }
-
-        $session->removePendingResponse($eventIdHex);
-
-        if ($message->isAuthRequired()) {
-            // Deliberate: with no handler the challenge can never be signed, so return the relay's rejection rather than park it forever - see ADR-0004
-            if (null === $this->authHandler) {
-                $session->removePendingEvent($eventIdHex);
-                $future->complete(PublishResult::rejected($message->getMessage()));
-
-                return;
-            }
-
-            $session->parkPublish(new ParkedPublish($eventIdHex, $future));
-
-            return;
-        }
-
-        $session->removePendingEvent($eventIdHex);
-        $future->complete($message->isAccepted()
-            ? PublishResult::accepted($message->getMessage())
-            : PublishResult::rejected($message->getMessage()));
-    }
-
-    private function isAuthOkResponse(RelayUrl $relayUrl, RelaySession $session, OkMessage $message): bool
-    {
-        $authEventIdHex = $message->getEventId()->toHex();
-
-        if (!$session->isPendingAuth($authEventIdHex)) {
-            return false;
-        }
-
-        $session->clearPendingAuth($authEventIdHex);
-
-        if ($message->isAccepted()) {
-            $this->flushAuthRetryQueue($relayUrl, $session);
-        } else {
-            $this->failAuthRetryQueue($session, $message->getMessage());
-        }
-
-        return true;
-    }
-
-    private function flushAuthRetryQueue(RelayUrl $relayUrl, RelaySession $session): void
-    {
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $eventIdHex = $parked->getEventIdHex();
-            $event = $session->getPendingEvent($eventIdHex);
-
-            if (null === $event) {
-                $parked->getDeferred()->error(
-                    ConnectionException::forRelay($relayUrl, 'Auth retry failed: event no longer available')
-                );
-                continue;
-            }
-
-            $session->setPendingResponse($eventIdHex, $parked->getDeferred());
-
-            try {
-                $session->getWebsocket()->sendText(new EventMessage($event)->toJson());
-            } catch (Throwable $e) {
-                $session->removePendingResponse($eventIdHex);
-                $session->removePendingEvent($eventIdHex);
-                $parked->getDeferred()->error(
-                    ConnectionException::forRelay($relayUrl, 'Auth retry failed: '.$e->getMessage())
-                );
-            }
-        }
-    }
-
-    private function failAuthRetryQueue(RelaySession $session, string $reason): void
-    {
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $session->removePendingEvent($parked->getEventIdHex());
-            $parked->getDeferred()->complete(PublishResult::rejected('auth-required, auth rejected: '.$reason));
-        }
-    }
-
-    private function handleEoseMessage(RelaySession $session, EoseMessage $message): void
-    {
-        $subscriptionId = $message->getSubscriptionId();
-
-        if (!$session->getConnection()->hasSubscription($subscriptionId)) {
-            return;
-        }
-
-        $session->setConnection($session->getConnection()->withSubscriptionState($subscriptionId, SubscriptionState::Live));
-
-        $session->getHandler($subscriptionId)?->handleEose($subscriptionId);
-    }
-
-    private function handleClosedMessage(RelaySession $session, ClosedMessage $message): void
-    {
-        $subscriptionId = $message->getSubscriptionId();
-        $reason = $message->getMessage() ?: 'No reason provided';
-
-        if (!$session->getConnection()->hasSubscription($subscriptionId)) {
-            return;
-        }
-
-        $handler = $session->getHandler($subscriptionId);
-
-        $session->setConnection(
-            $session->getConnection()
-                ->withSubscriptionState($subscriptionId, SubscriptionState::ClosedByRelay)
-                ->withoutSubscription($subscriptionId)
-        );
-        $session->removeHandler($subscriptionId);
-
-        $handler?->handleClosed($subscriptionId, $reason);
-    }
-
-    private function handleNoticeMessage(RelayUrl $relayUrl, RelaySession $session, NoticeMessage $message): void
-    {
-        $notice = $message->getMessage();
-
-        $this->logger->info('NOTICE message received from relay', [
-            'relay' => (string) $relayUrl,
-            'notice' => $notice,
-        ]);
-
-        if (self::APPLICATION_PING_NOTICE === strtolower(trim($notice))) {
-            $this->respondToApplicationPing($relayUrl, $session);
-
-            return;
-        }
-
-        foreach ($session->distinctHandlers() as $handler) {
-            $handler->handleNotice($relayUrl, $notice);
-        }
-    }
-
-    // Deliberate: keep-alive reply via CLOSE for a throwaway subscription - see ADR-0003
-    private function respondToApplicationPing(RelayUrl $relayUrl, RelaySession $session): void
-    {
-        $keepAliveSubscriptionId = SubscriptionId::fromString(self::KEEP_ALIVE_SUBSCRIPTION_ID);
-
-        if (null === $keepAliveSubscriptionId) {
-            return;
-        }
-
-        try {
-            $session->getWebsocket()->sendText(new CloseMessage($keepAliveSubscriptionId)->toJson());
-
-            $this->logger->debug('Responded to application-level ping', [
-                'relay' => (string) $relayUrl,
-            ]);
-        } catch (Throwable $e) {
-            $this->logger->warning('Failed to respond to application-level ping', [
-                'relay' => (string) $relayUrl,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function handleAuthMessage(RelayUrl $relayUrl, AuthMessage $message): void
-    {
-        if (null === $this->authHandler) {
-            $this->logger->debug('AUTH challenge received but no handler configured', [
-                'relay' => (string) $relayUrl,
-            ]);
-
-            return;
-        }
-
-        try {
-            $authEvent = $this->authHandler->handleAuthChallenge($relayUrl, $message->getChallenge());
-
-            if (null !== $authEvent) {
-                $this->sendAuth($relayUrl, $authEvent);
-
-                $this->logger->debug('AUTH response sent', [
-                    'relay' => (string) $relayUrl,
-                ]);
-            }
-        } catch (Throwable $e) {
-            $this->logger->error('AUTH challenge handler failed', [
-                'relay' => (string) $relayUrl,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    private function sendAuth(RelayUrl $relayUrl, Event $authEvent): void
-    {
-        $eventIdHex = $authEvent->getId()->toHex();
-        $session = $this->requireSession($relayUrl);
-        $websocket = $session->getWebsocket();
-        $session->markPendingAuth($eventIdHex);
-
-        try {
-            $websocket->sendText(new ClientAuthMessage($authEvent)->toJson());
-        } catch (Throwable $e) {
-            $session->clearPendingAuth($eventIdHex);
-
-            throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
-        }
+        $this->dispatcher->dispatch($session, $jsonMessage);
     }
 
     private function handleConnectionError(RelayUrl $relayUrl, Throwable $error, ?int $generation = null): void
     {
-        $urlString = (string) $relayUrl;
+        $reconnectConfig = $this->errorHandler->fail($relayUrl, $error, $generation);
 
-        if (null !== $generation && ($this->connectionGenerations[$urlString] ?? 0) !== $generation) {
-            return;
-        }
-
-        $session = $this->sessions[$urlString] ?? null;
-
-        if (null === $session) {
-            return;
-        }
-
-        if (ConnectionState::FAILED === $session->getConnection()->getState()) {
-            return;
-        }
-
-        $config = $session->getConnection()->getConfig();
-        $activeSubscriptions = $session->getConnection()->getSubscriptions();
-        $session->setConnection($session->getConnection()->withState(ConnectionState::FAILED)->withoutSubscriptions());
-
-        foreach ($activeSubscriptions as $subscription) {
-            $subscriptionId = $subscription->getId();
-            try {
-                $handler = $session->getHandler($subscriptionId);
-                $session->removeHandler($subscriptionId);
-
-                if (null !== $handler) {
-                    $handler->handleClosed($subscriptionId, 'Connection error: '.$error->getMessage());
-                }
-            } catch (Throwable $e) {
-                $this->logger->warning('Failed to notify handler of connection error', [
-                    'relay' => $urlString,
-                    'subscription_id' => (string) $subscriptionId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        foreach ($session->pendingResponses() as $key => $deferred) {
-            $session->removePendingResponse($key);
-            $deferred->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
-        }
-
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $parked->getDeferred()->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
-        }
-
-        $session->loseWebsocket();
-
-        if ($config->isAutoReconnect()) {
-            $this->scheduleReconnect($relayUrl, $config);
+        if (null !== $reconnectConfig) {
+            $this->scheduleReconnect($relayUrl, $reconnectConfig);
         }
     }
 
@@ -689,12 +367,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     {
         $urlString = (string) $relayUrl;
 
-        if (isset($this->reconnectCancellations[$urlString])) {
+        if ($this->registry->hasReconnect($relayUrl)) {
             return;
         }
 
         $deferred = new DeferredCancellation();
-        $this->reconnectCancellations[$urlString] = $deferred;
+        $this->registry->beginReconnect($relayUrl, $deferred);
         $cancellation = $deferred->getCancellation();
 
         async(weakClosure(function () use ($relayUrl, $config, $cancellation, $urlString): void {
@@ -731,13 +409,13 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     continue;
                 }
 
-                if (!isset($this->reconnectCancellations[$urlString])) {
+                if (!$this->registry->hasReconnect($relayUrl)) {
                     $this->disconnect($relayUrl);
 
                     return;
                 }
 
-                unset($this->reconnectCancellations[$urlString]);
+                $this->registry->endReconnect($relayUrl);
 
                 $this->logger->info('Relay reconnect succeeded', [
                     'relay' => $urlString,
@@ -758,7 +436,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 return;
             }
 
-            unset($this->reconnectCancellations[$urlString]);
+            $this->registry->endReconnect($relayUrl);
 
             $this->logger->error('Relay reconnect gave up after max attempts', [
                 'relay' => $urlString,
