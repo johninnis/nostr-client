@@ -15,13 +15,13 @@
         "php": "^8.4",
         "amphp/amp": "^3.0",
         "amphp/websocket-client": "^2.0",
-        "innis/nostr-core": "@dev",
+        "innis/nostr-core": "^0.5",
         "psr/log": "^3.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.95",
-        "innis/coding-standards": "@dev",
-        "innis/nostr-relay": "dev-master",
+        "innis/coding-standards": "^0.1",
+        "innis/nostr-relay": "^0.5",
         "phpstan/phpstan": "~2.2.2",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^13.1",
@@ -57,7 +57,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-master": "0.4.x-dev"
+            "dev-master": "0.5.x-dev"
         }
     }
 }
