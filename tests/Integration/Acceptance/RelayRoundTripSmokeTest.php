@@ -83,15 +83,15 @@ final class RelayRoundTripSmokeTest extends TestCase
     {
         $config = new LoopbackRelayConfig();
         $logger = new NullLogger();
-        $authManager = new InMemoryAuthenticationRegistry(new NativeRandomBytesGenerator());
+        $authenticationRegistry = new InMemoryAuthenticationRegistry(new NativeRandomBytesGenerator());
         $policyConfig = RelayPolicyConfig::tryFromArray([]) ?? self::fail('invalid relay policy configuration');
 
         $relay = new RelayServerFactory(
             eventStore: $store,
-            policy: new RelayPolicy($authManager, $logger, $policyConfig),
+            policy: new RelayPolicy($authenticationRegistry, $logger, $policyConfig),
             config: $config,
             rateLimitPolicy: new StaticRateLimitPolicy(new RateLimitConfig(eventsPerMinute: 600, subscriptionsPerMinute: 600)),
-            authManager: $authManager,
+            authenticationRegistry: $authenticationRegistry,
             logger: $logger,
             nip11InfoProvider: new StaticNip11InfoProvider(
                 Nip11Info::fromArray($config->getRelayUrl(), ['name' => 'nostr-client smoke test', 'supported_nips' => [1, 11]]),

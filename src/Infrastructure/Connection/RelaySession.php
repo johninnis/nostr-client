@@ -60,23 +60,34 @@ final class RelaySession
         $this->connection = $connection;
     }
 
-    public function getWebsocket(): WebsocketConnection
+    public function send(ClientMessage $message): void
+    {
+        $this->getWebsocket()->sendText($message->toJson());
+    }
+
+    public function ping(): void
+    {
+        $this->getWebsocket()->ping();
+    }
+
+    public function closeWebsocket(): void
+    {
+        $this->websocket?->close();
+        $this->websocket = null;
+    }
+
+    public function loseWebsocket(): void
+    {
+        $this->websocket = null;
+    }
+
+    private function getWebsocket(): WebsocketConnection
     {
         if (null === $this->websocket) {
             throw ConnectionException::forRelay($this->connection->getRelayUrl(), 'Websocket not available');
         }
 
         return $this->websocket;
-    }
-
-    public function send(ClientMessage $message): void
-    {
-        $this->getWebsocket()->sendText($message->toJson());
-    }
-
-    public function loseWebsocket(): void
-    {
-        $this->websocket = null;
     }
 
     public function setHandler(SubscriptionId $subscriptionId, EventHandlerInterface $handler): void

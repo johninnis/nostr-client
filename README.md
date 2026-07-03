@@ -56,8 +56,13 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
 $client = NostrClientFactory::create();
 
-$client->connect(RelayUrl::fromString('wss://relay.damus.io'));
-$client->connect(RelayUrl::fromString('wss://nos.lol'));
+$damus = RelayUrl::tryFromString('wss://relay.damus.io')
+    ?? throw new InvalidArgumentException('Invalid relay URL');
+$nosLol = RelayUrl::tryFromString('wss://nos.lol')
+    ?? throw new InvalidArgumentException('Invalid relay URL');
+
+$client->connect($damus);
+$client->connect($nosLol);
 
 $handler = new class implements EventHandlerInterface {
     public function handleEvent(Event $event, SubscriptionId $subscriptionId): void
@@ -71,27 +76,26 @@ $handler = new class implements EventHandlerInterface {
 };
 
 $filter = new Filter(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10);
-$relay = RelayUrl::fromString('wss://relay.damus.io');
 
-$subscriptionId = $client->subscribe($relay, $filter, $handler);
+$subscriptionId = $client->subscribe($damus, $filter, $handler);
 
 \Amp\delay(5);
 
-$client->unsubscribe($relay, $subscriptionId);
+$client->unsubscribe($damus, $subscriptionId);
 $client->close();
 ```
 
 ### Publish Events
 
 ```php
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 
 $signer = Secp256k1Signer::create();
 $keyPair = KeyPair::generate($signer);
-$event = EventFactory::createTextNote($keyPair->getPublicKey(), 'Hello Nostr!');
-$signedEvent = $event->sign($keyPair, $signer);
+$signedEvent = RumourFactory::createTextNote($keyPair->getPublicKey(), 'Hello Nostr!')
+    ->sign($keyPair, $signer);
 
 // publishEvent() returns a Future<PublishResult>. Await it for the relay's verdict,
 // or drop it for fire-and-forget.
@@ -222,7 +226,7 @@ Register an auth handler to sign relay challenges. When `publishEvent()` is reje
 
 ```php
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
-use Innis\Nostr\Core\Domain\Factory\EventFactory;
+use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 
 $authHandler = new class($keyPair, $signer) implements AuthChallengeHandlerInterface {
@@ -233,9 +237,8 @@ $authHandler = new class($keyPair, $signer) implements AuthChallengeHandlerInter
 
     public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
     {
-        $event = EventFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge);
-
-        return $event->sign($this->keyPair, $this->signer);
+        return RumourFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge)
+            ->sign($this->keyPair, $this->signer);
     }
 };
 
@@ -248,7 +251,9 @@ Check relay health without an active connection:
 
 ```php
 $healthChecker = NostrClientFactory::createHealthChecker();
-$result = $healthChecker->checkHealth(RelayUrl::fromString('wss://relay.damus.io'));
+$relay = RelayUrl::tryFromString('wss://relay.damus.io')
+    ?? throw new InvalidArgumentException('Invalid relay URL');
+$result = $healthChecker->checkHealth($relay);
 ```
 
 See [`examples/`](examples/) for complete working examples.
@@ -307,9 +312,13 @@ src/
     Exception/ClientException            Base exception (extends NostrException)
     Exception/ConnectionException        Connection-specific errors
   Infrastructure/
-    Connection/AmphpRelayConnection      WebSocket connection handler (AMPHP)
+    Connection/AmphpRelayConnection      Transport port implementation (AMPHP); drives the collaborators below
     Connection/ConnectionFactory         WebSocket connection creation
     Connection/RelaySession              Per-relay live state (socket, handlers, pending)
+    Connection/RelaySessionRegistry      Per-relay sessions, generations and reconnect cancellations
+    Connection/InboundMessageDispatcher  Deserialises a frame and routes it to the matching handler
+    Connection/EventMessageHandler       Inbound EVENT/OK/EOSE/CLOSED/NOTICE/AUTH handlers
+    Connection/ConnectionErrorHandler    Fails a connection: notifies subscribers, errors pending publishes
     Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
     Connection/WebSocketHealthChecker    Standalone relay health checker
     Factory/NostrClientFactory           Dependency wiring

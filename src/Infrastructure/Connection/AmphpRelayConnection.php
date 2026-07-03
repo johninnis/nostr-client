@@ -132,7 +132,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $this->registry->nextGeneration($relayUrl);
 
         try {
-            $session->getWebsocket()->close();
+            $session->closeWebsocket();
         } catch (Throwable $e) {
             $this->logger->debug('Failed to close WebSocket during disconnect', [
                 'relay' => $urlString,
@@ -249,10 +249,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     #[Override]
     public function ping(RelayUrl $relayUrl): void
     {
-        $websocket = $this->requireSession($relayUrl)->getWebsocket();
+        $session = $this->requireSession($relayUrl);
 
         try {
-            $websocket->ping();
+            $session->ping();
+        } catch (ConnectionException $e) {
+            throw $e;
         } catch (Throwable $e) {
             throw ConnectionException::forRelay($relayUrl, $e->getMessage(), $e);
         }

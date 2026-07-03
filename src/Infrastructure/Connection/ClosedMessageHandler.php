@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
-use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\ClosedMessage;
 
 final readonly class ClosedMessageHandler
@@ -20,11 +19,7 @@ final readonly class ClosedMessageHandler
 
         $handler = $session->getHandler($subscriptionId);
 
-        $session->setConnection(
-            $session->getConnection()
-                ->withSubscriptionState($subscriptionId, SubscriptionState::ClosedByRelay)
-                ->withoutSubscription($subscriptionId)
-        );
+        $session->setConnection($session->getConnection()->withoutSubscription($subscriptionId));
         $session->removeHandler($subscriptionId);
 
         $handler?->handleClosed($subscriptionId, $reason);
