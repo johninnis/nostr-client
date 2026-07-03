@@ -26,7 +26,7 @@ $relays = [
 ];
 
 foreach ($relays as $url) {
-    $relay = RelayUrl::fromString($url);
+    $relay = RelayUrl::tryFromString($url);
     if (null === $relay) {
         echo "Invalid relay URL: {$url}\n";
         continue;
