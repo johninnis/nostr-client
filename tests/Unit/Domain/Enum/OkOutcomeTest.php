@@ -34,6 +34,6 @@ final class OkOutcomeTest extends TestCase
 
     private function eventId(): EventId
     {
-        return EventId::fromHex(str_repeat('a', 64)) ?? self::fail('invalid event id');
+        return EventId::tryFromHex(str_repeat('a', 64)) ?? self::fail('invalid event id');
     }
 }

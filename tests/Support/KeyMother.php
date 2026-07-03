@@ -13,6 +13,6 @@ final class KeyMother
 
     public static function alicePublicKey(): PublicKey
     {
-        return PublicKey::fromHex(self::ALICE_PUBLIC_KEY_HEX) ?? throw new RuntimeException('Invalid test public key');
+        return PublicKey::tryFromHex(self::ALICE_PUBLIC_KEY_HEX) ?? throw new RuntimeException('Invalid test public key');
     }
 }

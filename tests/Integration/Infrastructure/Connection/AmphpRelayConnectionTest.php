@@ -43,15 +43,15 @@ final class AmphpRelayConnectionTest extends TestCase
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
 
-        $subscriptionId = SubscriptionId::fromString('sub-1');
+        $subscriptionId = SubscriptionId::tryFromString('sub-1');
         self::assertNotNull($subscriptionId);
-        $filter = Filter::fromArray(['kinds' => [1]]);
+        $filter = Filter::tryFromArray(['kinds' => [1]]);
         self::assertNotNull($filter);
         $connection->subscribe($relayUrl, $subscriptionId, $filter, $handler);
 
         delay(0.1);
 
-        $keepAlive = SubscriptionId::fromString('keepalive');
+        $keepAlive = SubscriptionId::tryFromString('keepalive');
         self::assertNotNull($keepAlive);
         $expectedClose = new CloseMessage($keepAlive);
         self::assertContains($expectedClose->toJson(), $websocket->sentTexts);
@@ -75,11 +75,11 @@ final class AmphpRelayConnectionTest extends TestCase
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
 
-        $filter = Filter::fromArray(['kinds' => [1]]);
+        $filter = Filter::tryFromArray(['kinds' => [1]]);
         self::assertNotNull($filter);
 
-        $first = SubscriptionId::fromString('sub-1');
-        $second = SubscriptionId::fromString('sub-2');
+        $first = SubscriptionId::tryFromString('sub-1');
+        $second = SubscriptionId::tryFromString('sub-2');
         self::assertNotNull($first);
         self::assertNotNull($second);
 
@@ -100,9 +100,9 @@ final class AmphpRelayConnectionTest extends TestCase
             new JsonMessageDeserialiser(),
         );
 
-        $subscriptionId = SubscriptionId::fromString('sub-1');
+        $subscriptionId = SubscriptionId::tryFromString('sub-1');
         self::assertNotNull($subscriptionId);
-        $filter = Filter::fromArray(['kinds' => [1]]);
+        $filter = Filter::tryFromArray(['kinds' => [1]]);
         self::assertNotNull($filter);
 
         $handler = $this->createMock(EventHandlerInterface::class);

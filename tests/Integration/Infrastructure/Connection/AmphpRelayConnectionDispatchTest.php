@@ -67,7 +67,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
             }
         };
 
-        $subscriptionId = SubscriptionId::fromString('sub-order');
+        $subscriptionId = SubscriptionId::tryFromString('sub-order');
         self::assertNotNull($subscriptionId);
         $connection->subscribe($relayUrl, $subscriptionId, $this->kindOneFilter(), $handler);
 
@@ -120,7 +120,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
             }
         };
 
-        $subscriptionId = SubscriptionId::fromString('sub-flood');
+        $subscriptionId = SubscriptionId::tryFromString('sub-flood');
         self::assertNotNull($subscriptionId);
         $connection->subscribe($relayUrl, $subscriptionId, $this->kindOneFilter(), $handler);
 
@@ -166,7 +166,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
 
     private function kindOneFilter(): Filter
     {
-        $filter = Filter::fromArray(['kinds' => [1]]);
+        $filter = Filter::tryFromArray(['kinds' => [1]]);
         self::assertNotNull($filter);
 
         return $filter;
@@ -174,7 +174,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
 
     private function eventFrame(string $subscriptionId, int $seq): string
     {
-        $subId = SubscriptionId::fromString($subscriptionId);
+        $subId = SubscriptionId::tryFromString($subscriptionId);
         self::assertNotNull($subId);
 
         return new RelayEventMessage($subId, EventMother::textNote('msg-'.$seq))->toJson();

@@ -48,6 +48,6 @@ final class RelaySessionTest extends TestCase
 
     private function subscriptionId(): SubscriptionId
     {
-        return SubscriptionId::fromString('sub-1') ?? self::fail('invalid subscription id');
+        return SubscriptionId::tryFromString('sub-1') ?? self::fail('invalid subscription id');
     }
 }

@@ -84,7 +84,7 @@ final class RelayRoundTripSmokeTest extends TestCase
         $config = new LoopbackRelayConfig();
         $logger = new NullLogger();
         $authManager = new InMemoryAuthenticationRegistry(new NativeRandomBytesGenerator());
-        $policyConfig = RelayPolicyConfig::fromArray([]) ?? self::fail('invalid relay policy configuration');
+        $policyConfig = RelayPolicyConfig::tryFromArray([]) ?? self::fail('invalid relay policy configuration');
 
         $relay = new RelayServerFactory(
             eventStore: $store,

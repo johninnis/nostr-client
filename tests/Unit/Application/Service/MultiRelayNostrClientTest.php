@@ -207,7 +207,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
-        $subscriptionId = SubscriptionId::fromString('test-sub');
+        $subscriptionId = SubscriptionId::tryFromString('test-sub');
         self::assertNotNull($subscriptionId);
 
         $this->handlerConnections[(string) $this->relayUrl] = $connection;
@@ -299,7 +299,7 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $filter = new Filter();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
-        $explicitId = SubscriptionId::fromString('my-subscription');
+        $explicitId = SubscriptionId::tryFromString('my-subscription');
 
         $handler
             ->expects($this->once())
@@ -569,7 +569,7 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $filters = new FilterCollection([new Filter(), new Filter()]);
         $eventHandler = $this->createStub(EventHandlerInterface::class);
-        $explicitId = SubscriptionId::fromString('multi-sub');
+        $explicitId = SubscriptionId::tryFromString('multi-sub');
 
         $handler
             ->expects($this->once())
@@ -586,7 +586,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
 
-        $subscriptionId = SubscriptionId::fromString('sub-1');
+        $subscriptionId = SubscriptionId::tryFromString('sub-1');
         self::assertNotNull($subscriptionId);
 
         $this->expectException(ConnectionException::class);

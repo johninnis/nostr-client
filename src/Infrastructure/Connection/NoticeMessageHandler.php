@@ -43,7 +43,7 @@ final readonly class NoticeMessageHandler
     // Deliberate: keep-alive reply via CLOSE for a throwaway subscription - see ADR-0003
     private function respondToApplicationPing(RelaySession $session): void
     {
-        $keepAliveSubscriptionId = SubscriptionId::fromString(self::KEEP_ALIVE_SUBSCRIPTION_ID);
+        $keepAliveSubscriptionId = SubscriptionId::tryFromString(self::KEEP_ALIVE_SUBSCRIPTION_ID);
 
         if (null === $keepAliveSubscriptionId) {
             return;
