@@ -188,7 +188,7 @@ $handler = new class implements EventHandlerInterface {
 /** @var list<RelayUrl> $relays */
 $relays = [];
 for ($r = 0; $r < $relayCount; ++$r) {
-    $url = RelayUrl::fromString(sprintf('wss://relay-%d.test', $r));
+    $url = RelayUrl::tryFromString(sprintf('wss://relay-%d.test', $r));
     if (null !== $url) {
         $relays[] = $url;
     }

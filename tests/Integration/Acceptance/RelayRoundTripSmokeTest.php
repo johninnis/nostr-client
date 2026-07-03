@@ -51,7 +51,7 @@ final class RelayRoundTripSmokeTest extends TestCase
 
         try {
             $address = $relay->getListeningAddress() ?? self::fail('relay is not listening');
-            $relayUrl = RelayUrl::fromString('ws://'.$address->toString()) ?? self::fail('invalid relay URL');
+            $relayUrl = RelayUrl::tryFromString('ws://'.$address->toString()) ?? self::fail('invalid relay URL');
 
             $client->connect($relayUrl);
             self::assertTrue($client->isConnected($relayUrl));

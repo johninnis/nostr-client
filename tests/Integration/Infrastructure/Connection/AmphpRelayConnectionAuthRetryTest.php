@@ -157,7 +157,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
 
     private function relayUrl(): RelayUrl
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
         self::assertNotNull($relayUrl);
 
         return $relayUrl;

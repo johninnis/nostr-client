@@ -88,6 +88,6 @@ final class ConnectionErrorHandlerTest extends TestCase
 
     private function relayUrl(): RelayUrl
     {
-        return RelayUrl::fromString(self::RELAY) ?? self::fail('invalid relay URL');
+        return RelayUrl::tryFromString(self::RELAY) ?? self::fail('invalid relay URL');
     }
 }

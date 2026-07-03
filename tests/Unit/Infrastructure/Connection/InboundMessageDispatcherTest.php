@@ -69,7 +69,7 @@ final class InboundMessageDispatcherTest extends TestCase
 
     private function session(ScriptedWebsocketConnection $ws): RelaySession
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test') ?? self::fail('invalid relay URL');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test') ?? self::fail('invalid relay URL');
         $connection = new RelayConnection($relayUrl, ConnectionState::CONNECTED, new ConnectionConfig());
 
         return new RelaySession($connection, $ws);

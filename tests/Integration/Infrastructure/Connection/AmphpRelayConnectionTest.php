@@ -29,7 +29,7 @@ final class AmphpRelayConnectionTest extends TestCase
 {
     public function testRespondsToApplicationPingNoticeWithCloseForThrowawaySubscription(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
         self::assertNotNull($relayUrl);
 
         $websocket = new FakeWebsocketConnection(WebsocketMessage::fromText('["NOTICE","ping"]'));
@@ -59,7 +59,7 @@ final class AmphpRelayConnectionTest extends TestCase
 
     public function testDeliversRelayNoticeOncePerHandlerRegardlessOfSubscriptionCount(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
         self::assertNotNull($relayUrl);
 
         $websocket = new FakeWebsocketConnection(WebsocketMessage::fromText('["NOTICE","relay is shutting down"]'));
@@ -91,7 +91,7 @@ final class AmphpRelayConnectionTest extends TestCase
 
     public function testSubscriptionAdvancesToLiveOnEoseThenIsRemovedOnClosed(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
         self::assertNotNull($relayUrl);
 
         $ws = new ScriptedWebsocketConnection();
@@ -129,7 +129,7 @@ final class AmphpRelayConnectionTest extends TestCase
 
     public function testSupersededMessageLoopDoesNotDisturbTheReplacementConnection(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.test');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
         self::assertNotNull($relayUrl);
 
         $stale = new ControllableWebsocketConnection();

@@ -20,7 +20,7 @@ final class WebSocketHealthCheckerTest extends TestCase
 
     public function testUnreachableRelayReturnsFailure(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://localhost:19999');
+        $relayUrl = RelayUrl::tryFromString('wss://localhost:19999');
         self::assertNotNull($relayUrl);
 
         $result = $this->healthChecker->checkHealth($relayUrl, 1.0);
@@ -31,7 +31,7 @@ final class WebSocketHealthCheckerTest extends TestCase
 
     public function testHealthCheckWithShortTimeoutReturnsFailure(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://localhost:19999');
+        $relayUrl = RelayUrl::tryFromString('wss://localhost:19999');
         self::assertNotNull($relayUrl);
 
         $result = $this->healthChecker->checkHealth($relayUrl, 0.1);

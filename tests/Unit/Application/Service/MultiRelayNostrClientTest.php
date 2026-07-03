@@ -33,7 +33,7 @@ final class MultiRelayNostrClientTest extends TestCase
 
     protected function setUp(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.example.com');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.example.com');
         self::assertNotNull($relayUrl);
         $this->relayUrl = $relayUrl;
     }
@@ -418,7 +418,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
-        $relay2 = RelayUrl::fromString('wss://relay2.example.com');
+        $relay2 = RelayUrl::tryFromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
 
         $this->handlerConnections[(string) $this->relayUrl] = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
@@ -644,7 +644,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $healthyConnection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
-        $relay2 = RelayUrl::fromString('wss://relay2.example.com');
+        $relay2 = RelayUrl::tryFromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
         $unhealthyConnection = new RelayConnection($relay2, ConnectionState::FAILED, $config);
 

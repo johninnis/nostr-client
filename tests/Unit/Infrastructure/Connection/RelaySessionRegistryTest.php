@@ -130,7 +130,7 @@ final class RelaySessionRegistryTest extends TestCase
 
     private function relayUrl(string $url): RelayUrl
     {
-        return RelayUrl::fromString($url) ?? self::fail('invalid relay URL');
+        return RelayUrl::tryFromString($url) ?? self::fail('invalid relay URL');
     }
 
     private function session(RelayUrl $relayUrl): RelaySession

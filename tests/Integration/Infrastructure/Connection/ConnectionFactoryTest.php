@@ -21,7 +21,7 @@ final class ConnectionFactoryTest extends TestCase
 
     public function testConnectionToUnreachableRelayThrowsConnectionException(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://localhost:19999');
+        $relayUrl = RelayUrl::tryFromString('wss://localhost:19999');
         self::assertNotNull($relayUrl);
         $config = new ConnectionConfig(connectionTimeoutSeconds: 1);
 
@@ -32,7 +32,7 @@ final class ConnectionFactoryTest extends TestCase
 
     public function testConnectionExceptionContainsRelayUrl(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://localhost:19999');
+        $relayUrl = RelayUrl::tryFromString('wss://localhost:19999');
         self::assertNotNull($relayUrl);
         $config = new ConnectionConfig(connectionTimeoutSeconds: 1);
 
@@ -47,7 +47,7 @@ final class ConnectionFactoryTest extends TestCase
 
     public function testConnectionToInvalidSchemeThrowsConnectionException(): void
     {
-        $relayUrl = RelayUrl::fromString('ws://localhost:19999');
+        $relayUrl = RelayUrl::tryFromString('ws://localhost:19999');
         self::assertNotNull($relayUrl);
         $config = new ConnectionConfig(connectionTimeoutSeconds: 1);
 

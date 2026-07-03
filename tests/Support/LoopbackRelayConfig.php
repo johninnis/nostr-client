@@ -36,7 +36,7 @@ final class LoopbackRelayConfig implements RelayConfigInterface
     #[Override]
     public function getRelayUrl(): RelayUrl
     {
-        return RelayUrl::fromString('ws://127.0.0.1')
+        return RelayUrl::tryFromString('ws://127.0.0.1')
             ?? throw new InvalidArgumentException('Invalid loopback relay URL');
     }
 

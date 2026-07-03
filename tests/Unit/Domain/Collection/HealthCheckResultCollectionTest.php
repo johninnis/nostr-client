@@ -16,7 +16,7 @@ final class HealthCheckResultCollectionTest extends TestCase
 
     protected function setUp(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.example.com');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.example.com');
         self::assertNotNull($relayUrl);
         $this->relayUrl = $relayUrl;
     }
@@ -48,7 +48,7 @@ final class HealthCheckResultCollectionTest extends TestCase
 
     public function testIteration(): void
     {
-        $relay2 = RelayUrl::fromString('wss://relay2.example.com');
+        $relay2 = RelayUrl::tryFromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
         $success = HealthCheckResult::success($this->relayUrl);
         $failure = HealthCheckResult::failure($relay2, 'Connection refused');

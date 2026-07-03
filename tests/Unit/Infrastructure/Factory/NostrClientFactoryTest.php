@@ -14,7 +14,7 @@ final class NostrClientFactoryTest extends TestCase
     public function testCreatedClientReportsUnknownRelayAsDisconnected(): void
     {
         $client = NostrClientFactory::create();
-        $relay = RelayUrl::fromString('wss://relay.example.com');
+        $relay = RelayUrl::tryFromString('wss://relay.example.com');
         self::assertNotNull($relay);
 
         $this->assertSame(ConnectionState::DISCONNECTED, $client->getConnectionStatus($relay));

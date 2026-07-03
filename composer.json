@@ -40,6 +40,7 @@
     "scripts": {
         "test": [
             "phpunit",
+            "@soak",
             "@analyse"
         ],
         "test-unit": "phpunit --testsuite=Unit",

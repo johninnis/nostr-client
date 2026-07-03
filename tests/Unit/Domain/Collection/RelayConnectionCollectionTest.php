@@ -18,7 +18,7 @@ final class RelayConnectionCollectionTest extends TestCase
 
     protected function setUp(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.example.com');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.example.com');
         self::assertNotNull($relayUrl);
         $this->connection = new RelayConnection(
             $relayUrl,
@@ -46,7 +46,7 @@ final class RelayConnectionCollectionTest extends TestCase
     public function testFilter(): void
     {
         $healthy = $this->connection;
-        $relay2 = RelayUrl::fromString('wss://relay2.example.com');
+        $relay2 = RelayUrl::tryFromString('wss://relay2.example.com');
         self::assertNotNull($relay2);
         $unhealthy = new RelayConnection(
             $relay2,

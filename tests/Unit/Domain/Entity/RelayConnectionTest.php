@@ -23,7 +23,7 @@ final class RelayConnectionTest extends TestCase
 
     protected function setUp(): void
     {
-        $relayUrl = RelayUrl::fromString('wss://relay.example.com');
+        $relayUrl = RelayUrl::tryFromString('wss://relay.example.com');
         self::assertNotNull($relayUrl);
         $this->relayUrl = $relayUrl;
         $this->config = new ConnectionConfig();
