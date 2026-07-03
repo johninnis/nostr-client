@@ -9,15 +9,11 @@ use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Enum\OkOutcome;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
-use Innis\Nostr\Core\Domain\Enum\RelayMessageType;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\OkMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
-use LogicException;
-use Override;
 use Throwable;
 
-final class OkMessageHandler implements RelayMessageHandlerInterface
+final class OkMessageHandler
 {
     private ?AuthChallengeHandlerInterface $authHandler = null;
 
@@ -26,21 +22,8 @@ final class OkMessageHandler implements RelayMessageHandlerInterface
         $this->authHandler = $handler;
     }
 
-    #[Override]
-    public function handles(): RelayMessageType
+    public function handle(OkMessage $message, RelaySession $session): void
     {
-        return RelayMessageType::Ok;
-    }
-
-    #[Override]
-    public function handle(RelaySession $session, RelayMessage $message): void
-    {
-        // The dispatcher only routes a message to the handler registered for its type, so this
-        // narrowing never fails; a mismatch is a wiring fault and must fail loudly.
-        if (!$message instanceof OkMessage) {
-            throw new LogicException(sprintf('%s cannot handle %s', self::class, $message::class));
-        }
-
         $eventIdHex = $message->getEventId()->toHex();
 
         if ($session->isPendingAuth($eventIdHex)) {
@@ -57,10 +40,20 @@ final class OkMessageHandler implements RelayMessageHandlerInterface
 
         $session->removePendingResponse($eventIdHex);
 
-        match (OkOutcome::classify($message)) {
-            OkOutcome::AuthRequired => $this->parkOrReject($message, $session, $future),
-            OkOutcome::Accepted, OkOutcome::Rejected => $this->settlePublish($message, $session, $future),
+        $result = match (OkOutcome::classify($message)) {
+            OkOutcome::AuthRequired => null,
+            OkOutcome::Accepted => PublishResult::accepted($message->getMessage()),
+            OkOutcome::Rejected => PublishResult::rejected($message->getMessage()),
         };
+
+        if (null === $result) {
+            $this->parkOrReject($message, $session, $future);
+
+            return;
+        }
+
+        $session->removePendingEvent($eventIdHex);
+        $future->complete($result);
     }
 
     private function acknowledgeAuth(OkMessage $message, RelaySession $session): void
@@ -92,17 +85,6 @@ final class OkMessageHandler implements RelayMessageHandlerInterface
         $session->parkPublish(new ParkedPublish($eventIdHex, $future));
     }
 
-    /**
-     * @param DeferredFuture<PublishResult> $future
-     */
-    private function settlePublish(OkMessage $message, RelaySession $session, DeferredFuture $future): void
-    {
-        $session->removePendingEvent($message->getEventId()->toHex());
-        $future->complete($message->isAccepted()
-            ? PublishResult::accepted($message->getMessage())
-            : PublishResult::rejected($message->getMessage()));
-    }
-
     private function flushAuthRetryQueue(RelaySession $session): void
     {
         foreach ($session->takeAuthRetryQueue() as $parked) {
@@ -123,9 +105,12 @@ final class OkMessageHandler implements RelayMessageHandlerInterface
             } catch (Throwable $e) {
                 $session->removePendingResponse($eventIdHex);
                 $session->removePendingEvent($eventIdHex);
-                $parked->getDeferred()->error(
-                    ConnectionException::forRelay($session->getConnection()->getRelayUrl(), 'Auth retry failed: '.$e->getMessage())
-                );
+
+                if (!$parked->getDeferred()->isComplete()) {
+                    $parked->getDeferred()->error(
+                        ConnectionException::forRelay($session->getConnection()->getRelayUrl(), 'Auth retry failed: '.$e->getMessage())
+                    );
+                }
             }
         }
     }

@@ -7,16 +7,12 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Enum\RelayMessageType;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\AuthMessage as ClientAuthMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\AuthMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
-use LogicException;
-use Override;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final class AuthMessageHandler implements RelayMessageHandlerInterface
+final class AuthMessageHandler
 {
     private ?AuthChallengeHandlerInterface $authHandler = null;
 
@@ -29,21 +25,8 @@ final class AuthMessageHandler implements RelayMessageHandlerInterface
         $this->authHandler = $handler;
     }
 
-    #[Override]
-    public function handles(): RelayMessageType
+    public function handle(AuthMessage $message, RelaySession $session): void
     {
-        return RelayMessageType::Auth;
-    }
-
-    #[Override]
-    public function handle(RelaySession $session, RelayMessage $message): void
-    {
-        // The dispatcher only routes a message to the handler registered for its type, so this
-        // narrowing never fails; a mismatch is a wiring fault and must fail loudly.
-        if (!$message instanceof AuthMessage) {
-            throw new LogicException(sprintf('%s cannot handle %s', self::class, $message::class));
-        }
-
         $relayUrl = $session->getConnection()->getRelayUrl();
 
         if (null === $this->authHandler) {

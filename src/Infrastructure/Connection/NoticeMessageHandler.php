@@ -4,17 +4,13 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
-use Innis\Nostr\Core\Domain\Enum\RelayMessageType;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\NoticeMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
-use LogicException;
-use Override;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final readonly class NoticeMessageHandler implements RelayMessageHandlerInterface
+final readonly class NoticeMessageHandler
 {
     private const string APPLICATION_PING_NOTICE = 'ping';
     private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
@@ -23,21 +19,8 @@ final readonly class NoticeMessageHandler implements RelayMessageHandlerInterfac
     {
     }
 
-    #[Override]
-    public function handles(): RelayMessageType
+    public function handle(NoticeMessage $message, RelaySession $session): void
     {
-        return RelayMessageType::Notice;
-    }
-
-    #[Override]
-    public function handle(RelaySession $session, RelayMessage $message): void
-    {
-        // The dispatcher only routes a message to the handler registered for its type, so this
-        // narrowing never fails; a mismatch is a wiring fault and must fail loudly.
-        if (!$message instanceof NoticeMessage) {
-            throw new LogicException(sprintf('%s cannot handle %s', self::class, $message::class));
-        }
-
         $notice = $message->getMessage();
         $relayUrl = $session->getConnection()->getRelayUrl();
 

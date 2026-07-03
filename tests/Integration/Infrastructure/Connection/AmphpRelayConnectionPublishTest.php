@@ -14,10 +14,10 @@ use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SendFailingWebsocketConnection;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
+use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
-use Innis\Nostr\Core\Infrastructure\Encoding\JsonMessageDeserialiser;
 use PHPUnit\Framework\TestCase;
 
 use function Amp\delay;
@@ -115,6 +115,28 @@ final class AmphpRelayConnectionPublishTest extends TestCase
         self::assertSame(ConnectionState::FAILED, $connection->getConnection($relayUrl)?->getState());
 
         $connection->disconnect($relayUrl);
+    }
+
+    public function testPublishOnAnAlreadyFailedConnectionThrowsInsteadOfHanging(): void
+    {
+        $relayUrl = $this->relayUrl();
+        $ws = new SendFailingWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($ws)),
+            new JsonMessageDeserialiser(),
+        );
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+        delay(0.01);
+
+        try {
+            $connection->publishEvent($relayUrl, EventMother::textNote())->await();
+        } catch (ConnectionException) {
+        }
+
+        self::assertSame(ConnectionState::FAILED, $connection->getConnection($relayUrl)?->getState());
+
+        $this->expectException(ConnectionException::class);
+        $connection->publishEvent($relayUrl, EventMother::textNote());
     }
 
     private function connect(ScriptedWebsocketConnection $ws, RelayUrl $relayUrl): AmphpRelayConnection

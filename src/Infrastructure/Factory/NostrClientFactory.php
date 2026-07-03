@@ -10,7 +10,7 @@ use Innis\Nostr\Client\Application\Service\NostrClientInterface;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Infrastructure\Connection\WebSocketHealthChecker;
-use Innis\Nostr\Core\Infrastructure\Encoding\JsonMessageDeserialiser;
+use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 

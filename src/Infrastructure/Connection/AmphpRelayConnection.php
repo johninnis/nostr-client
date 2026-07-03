@@ -199,6 +199,11 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function publishEvent(RelayUrl $relayUrl, Event $event): Future
     {
         $session = $this->requireSession($relayUrl);
+
+        if (!$session->getConnection()->isHealthy()) {
+            throw ConnectionException::forRelay($relayUrl, 'Websocket not available');
+        }
+
         $eventIdHex = $event->getId()->toHex();
 
         $session->setPendingEvent($eventIdHex, $event);

@@ -20,7 +20,6 @@ final readonly class ConnectionErrorHandler
     ) {
     }
 
-    // Returns the config to reconnect with when the connection was failed and auto-reconnect is on, else null.
     public function fail(RelayUrl $relayUrl, Throwable $error, ?int $generation = null): ?ConnectionConfig
     {
         if (null !== $generation && $this->registry->generation($relayUrl) !== $generation) {
