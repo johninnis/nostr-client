@@ -20,6 +20,10 @@ final class RelaySessionRegistry
     /** @var array<string, DeferredCancellation> */
     private array $reconnectCancellations = [];
 
+    // Deliberate: the heartbeat cancellation is kept here so a teardown can cancel the sleeping loop at once, rather than leaving it pending a full interval - see ADR-0013
+    /** @var array<string, DeferredCancellation> */
+    private array $heartbeatCancellations = [];
+
     public function find(RelayUrl $relayUrl): ?RelaySession
     {
         return $this->sessions[(string) $relayUrl] ?? null;
@@ -80,5 +84,22 @@ final class RelaySessionRegistry
 
         $cancellation->cancel();
         unset($this->reconnectCancellations[(string) $relayUrl]);
+    }
+
+    public function beginHeartbeat(RelayUrl $relayUrl, DeferredCancellation $cancellation): void
+    {
+        $this->cancelHeartbeat($relayUrl);
+        $this->heartbeatCancellations[(string) $relayUrl] = $cancellation;
+    }
+
+    public function cancelHeartbeat(RelayUrl $relayUrl): void
+    {
+        $cancellation = $this->heartbeatCancellations[(string) $relayUrl] ?? null;
+        if (null === $cancellation) {
+            return;
+        }
+
+        $cancellation->cancel();
+        unset($this->heartbeatCancellations[(string) $relayUrl]);
     }
 }

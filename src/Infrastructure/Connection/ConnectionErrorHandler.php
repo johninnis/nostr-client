@@ -44,6 +44,7 @@ final readonly class ConnectionErrorHandler
         $this->failPendingPublishes($session, $error);
 
         $session->loseWebsocket();
+        $this->registry->cancelHeartbeat($relayUrl);
 
         return $config->isAutoReconnect() ? $config : null;
     }

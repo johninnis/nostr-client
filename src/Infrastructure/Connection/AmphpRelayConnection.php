@@ -120,6 +120,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $urlString = (string) $relayUrl;
 
         $this->registry->cancelReconnect($relayUrl);
+        $this->registry->cancelHeartbeat($relayUrl);
 
         $session = $this->registry->find($relayUrl);
         if (null === $session) {
@@ -368,9 +369,17 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             return;
         }
 
-        async(weakClosure(function () use ($relayUrl, $generation, $intervalSeconds, $keepAlive): void {
+        $deferred = new DeferredCancellation();
+        $this->registry->beginHeartbeat($relayUrl, $deferred);
+        $cancellation = $deferred->getCancellation();
+
+        async(weakClosure(function () use ($relayUrl, $generation, $intervalSeconds, $keepAlive, $cancellation): void {
             while (true) {
-                delay($intervalSeconds);
+                try {
+                    delay($intervalSeconds, cancellation: $cancellation);
+                } catch (CancelledException) {
+                    return;
+                }
 
                 if ($this->registry->generation($relayUrl) !== $generation) {
                     return;
