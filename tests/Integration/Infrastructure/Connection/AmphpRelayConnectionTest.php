@@ -57,6 +57,76 @@ final class AmphpRelayConnectionTest extends TestCase
         self::assertContains($expectedClose->toJson(), $websocket->sentTexts);
     }
 
+    public function testSendsPeriodicHeartbeatCloseWhileTheConnectionIsIdle(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $websocket = new ControllableWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($websocket)),
+            new JsonMessageDeserialiser(),
+        );
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 20));
+        delay(0.05);
+
+        $connection->disconnect($relayUrl);
+        $websocket->simulateRemoteClose();
+
+        self::assertContains($this->keepAliveClose(), $websocket->sentTexts);
+    }
+
+    public function testHeartbeatStopsAfterDisconnect(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $websocket = new ControllableWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($websocket)),
+            new JsonMessageDeserialiser(),
+        );
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 20));
+        delay(0.05);
+        $connection->disconnect($relayUrl);
+        $sentByDisconnect = count($websocket->sentTexts);
+
+        delay(0.06);
+        $websocket->simulateRemoteClose();
+
+        self::assertCount($sentByDisconnect, $websocket->sentTexts);
+    }
+
+    public function testHeartbeatIsDisabledWhenIntervalIsZero(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $websocket = new ControllableWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($websocket)),
+            new JsonMessageDeserialiser(),
+        );
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 0));
+        delay(0.05);
+
+        $connection->disconnect($relayUrl);
+        $websocket->simulateRemoteClose();
+
+        self::assertNotContains($this->keepAliveClose(), $websocket->sentTexts);
+    }
+
+    private function keepAliveClose(): string
+    {
+        $keepAlive = SubscriptionId::tryFromString('keepalive');
+        self::assertNotNull($keepAlive);
+
+        return (new CloseMessage($keepAlive))->toJson();
+    }
+
     public function testDeliversRelayNoticeOncePerHandlerRegardlessOfSubscriptionCount(): void
     {
         $relayUrl = RelayUrl::tryFromString('wss://relay.test');

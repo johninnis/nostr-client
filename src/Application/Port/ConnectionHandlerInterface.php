@@ -18,7 +18,7 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
 interface ConnectionHandlerInterface
 {
-    public function setAuthHandler(AuthChallengeHandlerInterface $handler): void;
+    public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void;
 
     public function setReconnectionListener(ReconnectionListenerInterface $listener): void;
 

@@ -19,6 +19,7 @@ final readonly class ConnectionConfig
         private int $reconnectInitialDelayMs = 500,
         private int $reconnectMaxDelayMs = 60000,
         private int $reconnectMaxAttempts = 0,
+        private int $heartbeatIntervalMs = 30000,
     ) {
         if ($connectionTimeoutSeconds <= 0) {
             throw new InvalidArgumentException('Connection timeout must be positive');
@@ -34,6 +35,10 @@ final readonly class ConnectionConfig
 
         if ($reconnectMaxAttempts < 0) {
             throw new InvalidArgumentException('Reconnect max attempts must be zero or positive');
+        }
+
+        if ($heartbeatIntervalMs < 0) {
+            throw new InvalidArgumentException('Heartbeat interval must be zero or positive');
         }
     }
 
@@ -75,6 +80,11 @@ final readonly class ConnectionConfig
         return $this->reconnectMaxAttempts;
     }
 
+    public function getHeartbeatIntervalMs(): int
+    {
+        return $this->heartbeatIntervalMs;
+    }
+
     public function baseBackoffMs(int $attempt): int
     {
         return (int) min($this->reconnectInitialDelayMs * (2 ** $attempt), $this->reconnectMaxDelayMs);
@@ -90,6 +100,7 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
+            $this->heartbeatIntervalMs,
         );
     }
 
@@ -106,6 +117,7 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
+            $this->heartbeatIntervalMs,
         );
     }
 
@@ -119,6 +131,7 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
+            $this->heartbeatIntervalMs,
         );
     }
 
@@ -132,6 +145,7 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $this->reconnectMaxAttempts,
+            $this->heartbeatIntervalMs,
         );
     }
 
@@ -145,6 +159,7 @@ final readonly class ConnectionConfig
             $initialMs,
             $maxMs,
             $this->reconnectMaxAttempts,
+            $this->heartbeatIntervalMs,
         );
     }
 
@@ -158,6 +173,21 @@ final readonly class ConnectionConfig
             $this->reconnectInitialDelayMs,
             $this->reconnectMaxDelayMs,
             $maxAttempts,
+            $this->heartbeatIntervalMs,
+        );
+    }
+
+    public function withHeartbeatIntervalMs(int $heartbeatIntervalMs): self
+    {
+        return new self(
+            $this->connectionTimeoutSeconds,
+            $this->headers,
+            $this->userAgent,
+            $this->autoReconnect,
+            $this->reconnectInitialDelayMs,
+            $this->reconnectMaxDelayMs,
+            $this->reconnectMaxAttempts,
+            $heartbeatIntervalMs,
         );
     }
 }

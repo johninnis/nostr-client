@@ -42,7 +42,7 @@ final class MultiRelayNostrClient implements NostrClientInterface
     }
 
     #[Override]
-    public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
+    public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void
     {
         $this->connectionHandler->setAuthHandler($handler);
     }

@@ -44,6 +44,7 @@ use function Amp\weakClosure;
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
     private const int MAX_INBOUND_BACKLOG = 1024;
+    private const string HEARTBEAT_SUBSCRIPTION_ID = 'keepalive';
 
     // Deliberate: the optional reconnection listener is registered after construction, not constructor-injected - see ADR-0010
     private ?ReconnectionListenerInterface $reconnectionListener = null;
@@ -76,7 +77,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
 
     // Deliberate: the auth handler is registered after construction, not constructor-injected - see ADR-0010
     #[Override]
-    public function setAuthHandler(AuthChallengeHandlerInterface $handler): void
+    public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void
     {
         $this->okHandler->setAuthHandler($handler);
         $this->authMessageHandler->setAuthHandler($handler);
@@ -105,6 +106,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             $generation = $this->registry->nextGeneration($relayUrl);
 
             $this->startMessageHandler($relayUrl, $websocket, $generation);
+            $this->startHeartbeat($relayUrl, $generation, $config);
         } catch (ConnectionException $e) {
             throw $e;
         } catch (Throwable $e) {
@@ -346,6 +348,50 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                     'relay' => (string) $relayUrl,
                     'error' => $e->getMessage(),
                 ]);
+            }
+        }))->ignore();
+    }
+
+    // Deliberate: periodic CLOSE keep-alive for an otherwise-silent connection, generation-fenced like the message loop - see ADR-0013
+    private function startHeartbeat(RelayUrl $relayUrl, int $generation, ConnectionConfig $config): void
+    {
+        $intervalMs = $config->getHeartbeatIntervalMs();
+
+        if (0 === $intervalMs) {
+            return;
+        }
+
+        $intervalSeconds = $intervalMs / 1000.0;
+        $keepAlive = SubscriptionId::tryFromString(self::HEARTBEAT_SUBSCRIPTION_ID);
+
+        if (null === $keepAlive) {
+            return;
+        }
+
+        async(weakClosure(function () use ($relayUrl, $generation, $intervalSeconds, $keepAlive): void {
+            while (true) {
+                delay($intervalSeconds);
+
+                if ($this->registry->generation($relayUrl) !== $generation) {
+                    return;
+                }
+
+                $session = $this->registry->find($relayUrl);
+
+                if (null === $session || !$session->getConnection()->isHealthy()) {
+                    return;
+                }
+
+                try {
+                    $session->send(new CloseMessage($keepAlive));
+                } catch (Throwable $e) {
+                    $this->logger->debug('Heartbeat send failed', [
+                        'relay' => (string) $relayUrl,
+                        'error' => $e->getMessage(),
+                    ]);
+
+                    return;
+                }
             }
         }))->ignore();
     }
