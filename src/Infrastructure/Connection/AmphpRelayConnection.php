@@ -11,6 +11,7 @@ use Amp\Pipeline\Queue;
 use Amp\TimeoutCancellation;
 use Amp\Websocket\Client\WebsocketConnection;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthResultListenerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
@@ -87,6 +88,12 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
     public function setReconnectionListener(ReconnectionListenerInterface $listener): void
     {
         $this->reconnectionListener = $listener;
+    }
+
+    #[Override]
+    public function setAuthResultListener(AuthResultListenerInterface $listener): void
+    {
+        $this->okHandler->setAuthResultListener($listener);
     }
 
     #[Override]

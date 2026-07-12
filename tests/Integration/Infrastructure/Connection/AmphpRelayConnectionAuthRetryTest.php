@@ -10,6 +10,7 @@ use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\FixedAuthChallengeHandler;
+use Innis\Nostr\Client\Tests\Support\RecordingAuthResultListener;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
@@ -137,6 +138,48 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
         self::assertFalse($result->isAccepted(), 'without an auth handler an auth-required publish resolves as rejected, never hangs');
         self::assertStringContainsString('auth-required', $result->getMessage());
         self::assertSame(1, self::countFrames($ws, 'EVENT'), 'a publish that cannot be authenticated is never retransmitted');
+
+        $connection->disconnect($relayUrl);
+    }
+
+    public function testAuthAcceptedNotifiesTheAuthResultListener(): void
+    {
+        $relayUrl = $this->relayUrl();
+        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = $this->connect($ws, $relayUrl, $authEvent);
+        $recorder = new RecordingAuthResultListener();
+        $connection->setAuthResultListener($recorder);
+
+        $ws->pushInbound(sprintf('["AUTH","%s"]', self::CHALLENGE));
+        delay(0.01);
+        $ws->pushInbound(sprintf('["OK","%s",true,""]', $authEvent->getId()->toHex()));
+        delay(0.01);
+
+        self::assertSame([['relay' => (string) $relayUrl, 'accepted' => true, 'message' => '']], $recorder->results);
+
+        $connection->disconnect($relayUrl);
+    }
+
+    public function testAuthRejectedNotifiesTheAuthResultListenerWithTheReason(): void
+    {
+        $relayUrl = $this->relayUrl();
+        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = $this->connect($ws, $relayUrl, $authEvent);
+        $recorder = new RecordingAuthResultListener();
+        $connection->setAuthResultListener($recorder);
+
+        $ws->pushInbound(sprintf('["AUTH","%s"]', self::CHALLENGE));
+        delay(0.01);
+        $ws->pushInbound(sprintf('["OK","%s",false,"error: authentication failed"]', $authEvent->getId()->toHex()));
+        delay(0.01);
+
+        self::assertCount(1, $recorder->results);
+        self::assertFalse($recorder->results[0]['accepted']);
+        self::assertStringContainsString('authentication failed', $recorder->results[0]['message']);
 
         $connection->disconnect($relayUrl);
     }

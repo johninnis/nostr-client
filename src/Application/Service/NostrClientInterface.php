@@ -6,6 +6,7 @@ namespace Innis\Nostr\Client\Application\Service;
 
 use Amp\Future;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthResultListenerInterface;
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
@@ -25,6 +26,8 @@ interface NostrClientInterface
     public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void;
 
     public function setReconnectionListener(ReconnectionListenerInterface $listener): void;
+
+    public function setAuthResultListener(AuthResultListenerInterface $listener): void;
 
     public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): void;
 

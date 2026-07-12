@@ -22,6 +22,8 @@ interface ConnectionHandlerInterface
 
     public function setReconnectionListener(ReconnectionListenerInterface $listener): void;
 
+    public function setAuthResultListener(AuthResultListenerInterface $listener): void;
+
     public function connect(RelayUrl $relayUrl, ConnectionConfig $config): void;
 
     public function disconnect(RelayUrl $relayUrl): void;

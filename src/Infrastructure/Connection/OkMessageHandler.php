@@ -6,6 +6,7 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Amp\DeferredFuture;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthResultListenerInterface;
 use Innis\Nostr\Client\Domain\Enum\OkOutcome;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
@@ -16,10 +17,16 @@ use Throwable;
 final class OkMessageHandler
 {
     private ?AuthChallengeHandlerInterface $authHandler = null;
+    private ?AuthResultListenerInterface $authResultListener = null;
 
     public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void
     {
         $this->authHandler = $handler;
+    }
+
+    public function setAuthResultListener(AuthResultListenerInterface $listener): void
+    {
+        $this->authResultListener = $listener;
     }
 
     public function handle(OkMessage $message, RelaySession $session): void
@@ -65,6 +72,12 @@ final class OkMessageHandler
         } else {
             $this->failAuthRetryQueue($session, $message->getMessage());
         }
+
+        $this->authResultListener?->onAuthResult(
+            $session->getConnection()->getRelayUrl(),
+            $message->isAccepted(),
+            $message->getMessage(),
+        );
     }
 
     /**

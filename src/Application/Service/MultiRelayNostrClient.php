@@ -6,6 +6,7 @@ namespace Innis\Nostr\Client\Application\Service;
 
 use Amp\Future;
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
+use Innis\Nostr\Client\Application\Port\AuthResultListenerInterface;
 use Innis\Nostr\Client\Application\Port\ConnectionHandlerInterface;
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
 use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
@@ -51,6 +52,12 @@ final class MultiRelayNostrClient implements NostrClientInterface
     public function setReconnectionListener(ReconnectionListenerInterface $listener): void
     {
         $this->connectionHandler->setReconnectionListener($listener);
+    }
+
+    #[Override]
+    public function setAuthResultListener(AuthResultListenerInterface $listener): void
+    {
+        $this->connectionHandler->setAuthResultListener($listener);
     }
 
     #[Override]
