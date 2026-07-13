@@ -34,6 +34,7 @@ final class ConnectionConfigTest extends TestCase
             reconnectInitialDelayMs: 100,
             reconnectMaxDelayMs: 5000,
             reconnectMaxAttempts: 5,
+            heartbeatIntervalMs: 45000,
         );
 
         $this->assertSame(30, $config->getConnectionTimeoutSeconds());
@@ -43,6 +44,7 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(100, $config->getReconnectInitialDelayMs());
         $this->assertSame(5000, $config->getReconnectMaxDelayMs());
         $this->assertSame(5, $config->getReconnectMaxAttempts());
+        $this->assertSame(45000, $config->getHeartbeatIntervalMs());
     }
 
     /**
@@ -88,68 +90,6 @@ final class ConnectionConfigTest extends TestCase
                 'Reconnect max attempts must be zero or positive',
             ],
         ];
-    }
-
-    public function testWithConnectionTimeout(): void
-    {
-        $original = new ConnectionConfig();
-        $modified = $original->withConnectionTimeout(20);
-
-        $this->assertSame(10, $original->getConnectionTimeoutSeconds());
-        $this->assertSame(20, $modified->getConnectionTimeoutSeconds());
-        $this->assertSame($original->getHeaders(), $modified->getHeaders());
-        $this->assertSame($original->getUserAgent(), $modified->getUserAgent());
-    }
-
-    public function testWithHeaders(): void
-    {
-        $original = new ConnectionConfig();
-        $headers = ['Authorization' => 'Bearer token', 'X-Custom' => 'value'];
-        $modified = $original->withHeaders($headers);
-
-        $this->assertEmpty($original->getHeaders());
-        $this->assertSame($headers, $modified->getHeaders());
-        $this->assertSame($original->getConnectionTimeoutSeconds(), $modified->getConnectionTimeoutSeconds());
-    }
-
-    public function testWithUserAgent(): void
-    {
-        $original = new ConnectionConfig();
-        $modified = $original->withUserAgent('NostrClient/1.0');
-
-        $this->assertNull($original->getUserAgent());
-        $this->assertSame('NostrClient/1.0', $modified->getUserAgent());
-        $this->assertSame($original->getConnectionTimeoutSeconds(), $modified->getConnectionTimeoutSeconds());
-        $this->assertSame($original->getHeaders(), $modified->getHeaders());
-    }
-
-    public function testWithAutoReconnect(): void
-    {
-        $original = new ConnectionConfig();
-        $modified = $original->withAutoReconnect(false);
-
-        $this->assertTrue($original->isAutoReconnect());
-        $this->assertFalse($modified->isAutoReconnect());
-    }
-
-    public function testWithReconnectDelays(): void
-    {
-        $original = new ConnectionConfig();
-        $modified = $original->withReconnectDelays(250, 10000);
-
-        $this->assertSame(500, $original->getReconnectInitialDelayMs());
-        $this->assertSame(60000, $original->getReconnectMaxDelayMs());
-        $this->assertSame(250, $modified->getReconnectInitialDelayMs());
-        $this->assertSame(10000, $modified->getReconnectMaxDelayMs());
-    }
-
-    public function testWithReconnectMaxAttempts(): void
-    {
-        $original = new ConnectionConfig();
-        $modified = $original->withReconnectMaxAttempts(3);
-
-        $this->assertSame(0, $original->getReconnectMaxAttempts());
-        $this->assertSame(3, $modified->getReconnectMaxAttempts());
     }
 
     public function testBaseBackoffGrowsExponentially(): void

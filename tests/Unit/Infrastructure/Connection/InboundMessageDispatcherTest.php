@@ -50,7 +50,7 @@ final class InboundMessageDispatcherTest extends TestCase
         return new InboundMessageDispatcher(
             $deserialiser,
             new NullLogger(),
-            new EventMessageHandler(new NullLogger()),
+            new EventMessageHandler(),
             new OkMessageHandler(),
             new EoseMessageHandler(),
             new ClosedMessageHandler(),

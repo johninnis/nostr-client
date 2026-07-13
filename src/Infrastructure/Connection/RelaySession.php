@@ -15,12 +15,6 @@ use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\ClientMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
-/**
- * The complete live state of one relay connection: the immutable connection
- * snapshot, the socket, and the per-subscription and per-publish bookkeeping that
- * was previously spread across parallel maps keyed by "url:subId" / "url:eventId".
- * Holding it per relay removes those composite keys and the prefix scans over them.
- */
 final class RelaySession
 {
     /** @var array<string, EventHandlerInterface> */
@@ -38,9 +32,6 @@ final class RelaySession
     /** @var list<ParkedPublish> */
     private array $authRetryQueue = [];
 
-    // Nullable because a FAILED connection's state outlives its socket: the socket
-    // is lost on a connection error while the connection stays observable as FAILED
-    // until the reconnect loop replaces it or gives up.
     private ?WebsocketConnection $websocket;
 
     public function __construct(
@@ -125,16 +116,13 @@ final class RelaySession
     {
         $this->openPendingResponse($eventIdHex);
 
-        // Read back across the method boundary so the future carries the array's declared
-        // DeferredFuture<PublishResult> type rather than the unparameterised new DeferredFuture.
         return $this->pendingResponses[$eventIdHex]->getFuture();
     }
 
     private function openPendingResponse(string $eventIdHex): void
     {
         $deferred = new DeferredFuture();
-        // Ignored so a fire-and-forget publish whose future the caller drops does not
-        // surface as an unhandled error; awaiting the returned future still yields the outcome.
+        // Deliberate: ignore() so a dropped fire-and-forget publish future never surfaces as an unhandled error - see ADR-0009
         $deferred->getFuture()->ignore();
         $this->pendingResponses[$eventIdHex] = $deferred;
     }

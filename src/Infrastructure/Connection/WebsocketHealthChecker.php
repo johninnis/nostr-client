@@ -14,7 +14,7 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
 
-final class WebSocketHealthChecker implements RelayHealthCheckerInterface
+final class WebsocketHealthChecker implements RelayHealthCheckerInterface
 {
     private const float DEFAULT_TIMEOUT_SECONDS = 5.0;
 

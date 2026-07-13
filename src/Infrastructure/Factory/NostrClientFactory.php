@@ -9,7 +9,7 @@ use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
 use Innis\Nostr\Client\Application\Service\NostrClientInterface;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
-use Innis\Nostr\Client\Infrastructure\Connection\WebSocketHealthChecker;
+use Innis\Nostr\Client\Infrastructure\Connection\WebsocketHealthChecker;
 use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -27,6 +27,6 @@ final class NostrClientFactory
 
     public static function createHealthChecker(LoggerInterface $logger = new NullLogger()): RelayHealthCheckerInterface
     {
-        return new WebSocketHealthChecker(new ConnectionFactory(), $logger);
+        return new WebsocketHealthChecker(new ConnectionFactory(), $logger);
     }
 }

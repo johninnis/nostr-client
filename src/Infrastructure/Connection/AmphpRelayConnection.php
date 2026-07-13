@@ -67,7 +67,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $this->dispatcher = new InboundMessageDispatcher(
             $deserialiser,
             $this->logger,
-            new EventMessageHandler($this->logger),
+            new EventMessageHandler(),
             $this->okHandler,
             new EoseMessageHandler(),
             new ClosedMessageHandler(),
@@ -150,7 +150,6 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
             ]);
         }
 
-        // Dropping the session releases its handlers, pending responses, events and auth queue.
         $this->registry->remove($relayUrl);
     }
 

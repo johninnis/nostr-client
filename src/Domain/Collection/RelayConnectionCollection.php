@@ -19,8 +19,11 @@ final class RelayConnectionCollection extends TypedCollection
         return RelayConnection::class;
     }
 
+    /**
+     * @param callable(RelayConnection): bool $predicate
+     */
     public function filter(callable $predicate): self
     {
-        return new self(array_filter($this->items, $predicate));
+        return new self(array_values(array_filter($this->items, $predicate)));
     }
 }

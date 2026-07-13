@@ -149,19 +149,21 @@ $subscriptionId = $client->subscribeMultiple(
 ### Connection Configuration
 
 `connect()` accepts an optional `ConnectionConfig`. It controls the connection timeout, request
-headers, user agent, and auto-reconnect behaviour. It is immutable; build variants with the `with*`
-methods.
+headers, user agent, and auto-reconnect behaviour. It is immutable; construct it with named
+arguments, defaulting anything you do not set.
 
 ```php
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 
-$config = (new ConnectionConfig())
-    ->withConnectionTimeout(15)
-    ->withHeaders(['Authorization' => 'Bearer token'])
-    ->withUserAgent('my-app/1.0')
-    ->withAutoReconnect(true)
-    ->withReconnectDelays(initialMs: 500, maxMs: 60000)
-    ->withReconnectMaxAttempts(0);
+$config = new ConnectionConfig(
+    connectionTimeoutSeconds: 15,
+    headers: ['Authorization' => 'Bearer token'],
+    userAgent: 'my-app/1.0',
+    autoReconnect: true,
+    reconnectInitialDelayMs: 500,
+    reconnectMaxDelayMs: 60000,
+    reconnectMaxAttempts: 0,
+);
 
 $client->connect($relay, $config);
 ```
@@ -320,7 +322,7 @@ src/
     Connection/EventMessageHandler       Inbound EVENT/OK/EOSE/CLOSED/NOTICE/AUTH handlers
     Connection/ConnectionErrorHandler    Fails a connection: notifies subscribers, errors pending publishes
     Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
-    Connection/WebSocketHealthChecker    Standalone relay health checker
+    Connection/WebsocketHealthChecker    Standalone relay health checker
     Factory/NostrClientFactory           Dependency wiring
 ```
 

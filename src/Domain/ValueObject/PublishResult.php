@@ -4,11 +4,6 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Domain\ValueObject;
 
-/**
- * A relay's verdict on a published event, mirroring the NIP-01 `OK` frame: accepted,
- * or rejected with the relay's reason. Both are anticipated outcomes returned to the
- * caller — only a broken connection is a thrown fault.
- */
 final readonly class PublishResult
 {
     private function __construct(

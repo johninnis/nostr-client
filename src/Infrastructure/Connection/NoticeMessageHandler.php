@@ -36,7 +36,14 @@ final readonly class NoticeMessageHandler
         }
 
         foreach ($session->distinctHandlers() as $handler) {
-            $handler->handleNotice($relayUrl, $notice);
+            try {
+                $handler->handleNotice($relayUrl, $notice);
+            } catch (Throwable $e) {
+                $this->logger->warning('Failed to notify handler of relay NOTICE', [
+                    'relay' => (string) $relayUrl,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 

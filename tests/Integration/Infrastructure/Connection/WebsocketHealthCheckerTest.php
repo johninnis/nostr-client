@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
-use Innis\Nostr\Client\Infrastructure\Connection\WebSocketHealthChecker;
+use Innis\Nostr\Client\Infrastructure\Connection\WebsocketHealthChecker;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 
-final class WebSocketHealthCheckerTest extends TestCase
+final class WebsocketHealthCheckerTest extends TestCase
 {
-    private WebSocketHealthChecker $healthChecker;
+    private WebsocketHealthChecker $healthChecker;
 
     protected function setUp(): void
     {
-        $this->healthChecker = new WebSocketHealthChecker(new ConnectionFactory());
+        $this->healthChecker = new WebsocketHealthChecker(new ConnectionFactory());
     }
 
     public function testUnreachableRelayReturnsFailure(): void
