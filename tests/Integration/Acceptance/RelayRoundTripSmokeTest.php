@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Tests\Integration\Acceptance;
 
+use Amp\Http\Server\DefaultErrorHandler;
+use Amp\Http\Server\SocketHttpServer;
+use Amp\Socket\InternetAddress;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Client\Tests\Support\CapturingEventHandler;
 use Innis\Nostr\Client\Tests\Support\InMemoryRelayEventStore;
@@ -24,7 +27,6 @@ use Innis\Nostr\Relay\Domain\ValueObject\RateLimitConfig;
 use Innis\Nostr\Relay\Domain\ValueObject\RelayPolicyConfig;
 use Innis\Nostr\Relay\Infrastructure\Http\StaticNip11InfoProvider;
 use Innis\Nostr\Relay\Infrastructure\RateLimiting\StaticRateLimitPolicy;
-use Innis\Nostr\Relay\Infrastructure\Server\RelayInstance;
 use Innis\Nostr\Relay\Infrastructure\Server\RelayServerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -46,12 +48,12 @@ final class RelayRoundTripSmokeTest extends TestCase
         }
 
         $store = new InMemoryRelayEventStore();
-        $relay = $this->startRelay($store);
+        $httpServer = $this->startRelay($store);
         $client = NostrClientFactory::create();
 
         try {
-            $address = $relay->getListeningAddress() ?? self::fail('relay is not listening');
-            $relayUrl = RelayUrl::tryFromString('ws://'.$address->toString()) ?? self::fail('invalid relay URL');
+            $address = $httpServer->getServers()[0] ?? self::fail('relay is not listening');
+            $relayUrl = RelayUrl::tryFromString('ws://'.$address->getAddress()->toString()) ?? self::fail('invalid relay URL');
 
             $client->connect($relayUrl);
             self::assertTrue($client->isConnected($relayUrl));
@@ -75,18 +77,18 @@ final class RelayRoundTripSmokeTest extends TestCase
             self::assertSame($event->getId()->toHex(), $received->getId()->toHex());
         } finally {
             $client->close();
-            $relay->stop();
+            $httpServer->stop();
         }
     }
 
-    private function startRelay(InMemoryRelayEventStore $store): RelayInstance
+    private function startRelay(InMemoryRelayEventStore $store): SocketHttpServer
     {
         $config = new LoopbackRelayConfig();
         $logger = new NullLogger();
         $authenticationRegistry = new InMemoryAuthenticationRegistry(new NativeRandomBytesGenerator());
         $policyConfig = RelayPolicyConfig::tryFromArray([]) ?? self::fail('invalid relay policy configuration');
 
-        $relay = new RelayServerFactory(
+        $factory = new RelayServerFactory(
             eventStore: $store,
             policy: new RelayPolicy($authenticationRegistry, $logger, $policyConfig),
             config: $config,
@@ -96,10 +98,12 @@ final class RelayRoundTripSmokeTest extends TestCase
             nip11InfoProvider: new StaticNip11InfoProvider(
                 Nip11Info::fromArray($config->getRelayUrl(), ['name' => 'nostr-client smoke test', 'supported_nips' => [1, 11]]),
             ),
-        )->create();
+        );
 
-        $relay->start();
+        $httpServer = SocketHttpServer::createForDirectAccess($logger);
+        $httpServer->expose(new InternetAddress('127.0.0.1', 0));
+        $httpServer->start($factory->create($httpServer)->getRequestHandler(), new DefaultErrorHandler());
 
-        return $relay;
+        return $httpServer;
     }
 }
