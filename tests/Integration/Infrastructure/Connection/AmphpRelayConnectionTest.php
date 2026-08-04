@@ -124,7 +124,7 @@ final class AmphpRelayConnectionTest extends TestCase
         $keepAlive = SubscriptionId::tryFromString('keepalive');
         self::assertNotNull($keepAlive);
 
-        return (new CloseMessage($keepAlive))->toJson();
+        return new CloseMessage($keepAlive)->toJson();
     }
 
     public function testDeliversRelayNoticeOncePerHandlerRegardlessOfSubscriptionCount(): void
