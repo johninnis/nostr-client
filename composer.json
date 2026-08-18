@@ -15,14 +15,14 @@
         "php": "^8.4",
         "amphp/amp": "^3.0",
         "amphp/websocket-client": "^2.0",
-        "innis/nostr-core": "^0.6",
+        "innis/nostr-core": "^0.7",
         "psr/log": "^3.0"
     },
     "require-dev": {
         "ext-ffi": "*",
         "friendsofphp/php-cs-fixer": "^3.95",
         "innis/coding-standards": "^0.1",
-        "innis/nostr-relay": "^0.6",
+        "innis/nostr-relay": "^0.7",
         "phpstan/phpstan": "~2.2.6",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^13.1",
