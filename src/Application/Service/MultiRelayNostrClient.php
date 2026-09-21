@@ -76,13 +76,15 @@ final class MultiRelayNostrClient implements NostrClientInterface
             return;
         }
 
-        $this->connectionTasks[$urlString] = async(function () use ($relay, $config) {
+        /** @var Future<void> $connecting */
+        $connecting = async(function () use ($relay, $config): void {
             try {
                 $this->connectionHandler->connect($relay, $config);
             } finally {
                 unset($this->connectionTasks[(string) $relay]);
             }
         });
+        $this->connectionTasks[$urlString] = $connecting;
 
         try {
             $this->connectionTasks[$urlString]->await();

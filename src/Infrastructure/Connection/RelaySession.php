@@ -121,6 +121,7 @@ final class RelaySession
 
     private function openPendingResponse(string $eventIdHex): void
     {
+        /** @var DeferredFuture<PublishResult> $deferred */
         $deferred = new DeferredFuture();
         // Deliberate: ignore() so a dropped fire-and-forget publish future never surfaces as an unhandled error - see ADR-0009
         $deferred->getFuture()->ignore();
