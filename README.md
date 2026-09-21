@@ -108,14 +108,11 @@ if ($result->isAccepted()) {
 }
 ```
 
-A relay accepting or rejecting an event (`duplicate`, `rate-limited`, `blocked`, …) is an anticipated
-outcome carried in the `PublishResult`; only a broken connection throws.
+A relay accepting or rejecting an event (`duplicate`, `rate-limited`, `blocked`, …) is an anticipated outcome carried in the `PublishResult`; only a broken connection throws.
 
 ### Health Checking
 
-`healthCheck()` pings every currently connected relay over its existing connection and reports whether
-each is still reachable. To probe a relay you are not connected to, use the standalone health checker
-below.
+`healthCheck()` pings every currently connected relay over its existing connection and reports whether each is still reachable. To probe a relay you are not connected to, use the standalone health checker below.
 
 ```php
 $results = $client->healthCheck();
@@ -148,9 +145,7 @@ $subscriptionId = $client->subscribeMultiple(
 
 ### Connection Configuration
 
-`connect()` accepts an optional `ConnectionConfig`. It controls the connection timeout, request
-headers, user agent, and auto-reconnect behaviour. It is immutable; construct it with named
-arguments, defaulting anything you do not set.
+`connect()` accepts an optional `ConnectionConfig`. It controls the connection timeout, request headers, user agent, and auto-reconnect behaviour. It is immutable; construct it with named arguments, defaulting anything you do not set.
 
 ```php
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
@@ -168,9 +163,7 @@ $config = new ConnectionConfig(
 $client->connect($relay, $config);
 ```
 
-Auto-reconnect is enabled by default. A dropped connection retries on jittered exponential backoff
-between `reconnectInitialDelayMs` and `reconnectMaxDelayMs`. `reconnectMaxAttempts` of `0` means
-unlimited retries; a positive value bounds them.
+Auto-reconnect is enabled by default. A dropped connection retries on jittered exponential backoff between `reconnectInitialDelayMs` and `reconnectMaxDelayMs`. `reconnectMaxAttempts` of `0` means unlimited retries; a positive value bounds them.
 
 ### Connection Management
 
@@ -187,13 +180,11 @@ $connected = $client->getConnectedRelays();
 $all = $client->getAllConnections();
 ```
 
-`getConnectionStatus()` returns a `ConnectionState`: `DISCONNECTED`, `CONNECTED`, `DISCONNECTING`, or
-`FAILED`.
+`getConnectionStatus()` returns a `ConnectionState`: `DISCONNECTED`, `CONNECTED`, `DISCONNECTING`, or `FAILED`.
 
 ### Reconnection Listener
 
-Register a listener to re-establish per-connection state (re-subscribe, re-authenticate) after a
-dropped connection is restored. The listener fires only on a successful reconnect.
+Register a listener to re-establish per-connection state (re-subscribe, re-authenticate) after a dropped connection is restored. The listener fires only on a successful reconnect.
 
 ```php
 use Innis\Nostr\Client\Application\Port\ReconnectionListenerInterface;
@@ -211,10 +202,7 @@ $client->setReconnectionListener($listener);
 
 ### Awaiting Publishes
 
-`publishEvent()` returns a `Future<PublishResult>` as soon as the event has been sent — await each
-future for that publish's individual outcome. To instead block until every in-flight publish for a
-relay has been acknowledged (including any parked on a NIP-42 auth challenge) without inspecting each
-result, drain them with an optional timeout in seconds.
+`publishEvent()` returns a `Future<PublishResult>` as soon as the event has been sent — await each future for that publish's individual outcome. To instead block until every in-flight publish for a relay has been acknowledged (including any parked on a NIP-42 auth challenge) without inspecting each result, drain them with an optional timeout in seconds.
 
 ```php
 $client->publishEvent($relay, $eventA);

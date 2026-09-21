@@ -6,61 +6,26 @@ Accepted
 
 ## Context
 
-"Is this relay healthy?" has two genuinely different meanings, and a single health check cannot answer
-both. A reviewer seeing two health-check code paths — `MultiRelayNostrClient::healthCheck()` and the
-standalone `WebSocketHealthChecker` reached through a separate factory method — is tempted to read one
-as a duplicate of the other and merge them. The temptation comes from the one thing they do share: both
-report a `HealthCheckResult`. That shared result type is deliberate vocabulary, not evidence of a
-duplicated operation — they are two different probes that happen to speak the same result.
+"Is this relay healthy?" has two genuinely different meanings, and a single health check cannot answer both. A reviewer seeing two health-check code paths — `MultiRelayNostrClient::healthCheck()` and the standalone `WebSocketHealthChecker` reached through a separate factory method — is tempted to read one as a duplicate of the other and merge them. The temptation comes from the one thing they do share: both report a `HealthCheckResult`. That shared result type is deliberate vocabulary, not evidence of a duplicated operation — they are two different probes that happen to speak the same result.
 
-- During a session the question is *"are the connections I already hold still alive?"* Answering that by
-  opening a fresh socket would measure the wrong thing (a brand-new connection, not the live one) and
-  would churn connections the client is actively using.
-- Before or without a session the question is *"can I reach this relay at all?"* — for example to pick
-  relays from a candidate list, or to probe one the client is not connected to. Answering that needs a
-  connection the client does not yet have, and the probe must not leave a connection behind.
+- During a session the question is *"are the connections I already hold still alive?"* Answering that by opening a fresh socket would measure the wrong thing (a brand-new connection, not the live one) and would churn connections the client is actively using.
+- Before or without a session the question is *"can I reach this relay at all?"* — for example to pick relays from a candidate list, or to probe one the client is not connected to. Answering that needs a connection the client does not yet have, and the probe must not leave a connection behind.
 
 ## Decision
 
 The two questions are served by two surfaces with different lifecycles.
 
-- **Over live connections.** `NostrClientInterface::healthCheck()` pings every relay the client is
-  currently connected to, concurrently, and reports whether each is still reachable. It reuses the
-  existing socket and probes the real connection. It checks only relays already connected — it never
-  opens one.
-- **Connectionless.** `RelayHealthCheckerInterface` (implemented by `WebSocketHealthChecker`, built via
-  `NostrClientFactory::createHealthChecker()`) opens a fresh WebSocket to a single relay under a
-  timeout and closes it immediately. It needs no `NostrClientInterface` and holds no long-lived state,
-  so it can probe a relay the client has no relationship with.
+- **Over live connections.** `NostrClientInterface::healthCheck()` pings every relay the client is currently connected to, concurrently, and reports whether each is still reachable. It reuses the existing socket and probes the real connection. It checks only relays already connected — it never opens one.
+- **Connectionless.** `RelayHealthCheckerInterface` (implemented by `WebSocketHealthChecker`, built via `NostrClientFactory::createHealthChecker()`) opens a fresh WebSocket to a single relay under a timeout and closes it immediately. It needs no `NostrClientInterface` and holds no long-lived state, so it can probe a relay the client has no relationship with.
 
-Both surfaces report **reachability, not latency.** A `HealthCheckResult` carries the relay, a
-healthy/unhealthy verdict, and a failure reason — no timing. The live check cannot honestly measure
-round-trip latency: a WebSocket `ping` returns as soon as its frame is written, and the matching `pong`
-is consumed by the transport's own heartbeat, so nothing surfaces to correlate the round-trip against.
-Reporting the write time as a `latencyMs` would hand back a number that reads like round-trip latency
-and is not one, so no timing is reported at all rather than a misleading one.
+Both surfaces report **reachability, not latency.** A `HealthCheckResult` carries the relay, a healthy/unhealthy verdict, and a failure reason — no timing. The live check cannot honestly measure round-trip latency: a WebSocket `ping` returns as soon as its frame is written, and the matching `pong` is consumed by the transport's own heartbeat, so nothing surfaces to correlate the round-trip against. Reporting the write time as a `latencyMs` would hand back a number that reads like round-trip latency and is not one, so no timing is reported at all rather than a misleading one.
 
-The signatures make the split concrete. `healthCheck()` takes no argument and returns a
-`HealthCheckResultCollection`: it cannot name a target because its target *is* "every relay I already
-hold", discovered from the live connections. `checkHealth(RelayUrl $relayUrl, float $timeout)` takes the
-one relay to probe and returns a single `HealthCheckResult`, because its target is a relay handed in
-from outside — typically one the client has no connection to. Neither signature can be expressed in
-terms of the other without a caller lying: a no-argument call has no way to name an unconnected relay,
-and a single-`RelayUrl` call has no way to mean "all my live ones".
+The signatures make the split concrete. `healthCheck()` takes no argument and returns a `HealthCheckResultCollection`: it cannot name a target because its target *is* "every relay I already hold", discovered from the live connections. `checkHealth(RelayUrl $relayUrl, float $timeout)` takes the one relay to probe and returns a single `HealthCheckResult`, because its target is a relay handed in from outside — typically one the client has no connection to. Neither signature can be expressed in terms of the other without a caller lying: a no-argument call has no way to name an unconnected relay, and a single-`RelayUrl` call has no way to mean "all my live ones".
 
-The connectionless checker is a separate object reached by a separate factory method precisely because
-its lifecycle is different: it is constructed and used without a `MultiRelayNostrClient`, and it owns no
-connections.
+The connectionless checker is a separate object reached by a separate factory method precisely because its lifecycle is different: it is constructed and used without a `MultiRelayNostrClient`, and it owns no connections.
 
 ## Consequences
 
-- A connected application calls `healthCheck()` to monitor its live relays without disturbing them; an
-  application choosing relays calls the standalone checker to probe candidates without committing to a
-  connection.
-- The two are not duplicates and must not be merged. Routing the live-connection check through the
-  standalone checker would measure a throwaway socket instead of the real one and churn live
-  connections; routing the probe through `healthCheck()` is impossible, as there is no connection to
-  ping.
-- The standalone checker always leaves the relay in the state it found it: it opens, probes, and
-  closes. Its result is a `HealthCheckResult` value, matching the per-relay results returned by
-  `healthCheck()`.
+- A connected application calls `healthCheck()` to monitor its live relays without disturbing them; an application choosing relays calls the standalone checker to probe candidates without committing to a connection.
+- The two are not duplicates and must not be merged. Routing the live-connection check through the standalone checker would measure a throwaway socket instead of the real one and churn live connections; routing the probe through `healthCheck()` is impossible, as there is no connection to ping.
+- The standalone checker always leaves the relay in the state it found it: it opens, probes, and closes. Its result is a `HealthCheckResult` value, matching the per-relay results returned by `healthCheck()`.
