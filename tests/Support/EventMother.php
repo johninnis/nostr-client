@@ -7,6 +7,7 @@ namespace Innis\Nostr\Client\Tests\Support;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\Signature;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Rumour;
 use RuntimeException;
@@ -18,7 +19,7 @@ final class EventMother
         return self::fromRumour(RumourFactory::createTextNote(KeyMother::alicePublicKey(), $content));
     }
 
-    public static function auth(RelayUrl $relayUrl, string $challenge): Event
+    public static function auth(RelayUrl $relayUrl, Challenge $challenge): Event
     {
         return self::fromRumour(RumourFactory::createAuth(KeyMother::alicePublicKey(), $relayUrl, $challenge));
     }

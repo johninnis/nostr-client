@@ -9,7 +9,6 @@ use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket\InternetAddress;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Client\Tests\Support\CapturingEventHandler;
-use Innis\Nostr\Client\Tests\Support\InMemoryRelayEventStore;
 use Innis\Nostr\Client\Tests\Support\LoopbackRelayConfig;
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Collection\PublicKeyCollection;
@@ -25,6 +24,7 @@ use Innis\Nostr\Relay\Application\Service\InMemoryAuthenticationRegistry;
 use Innis\Nostr\Relay\Application\Service\RelayPolicy;
 use Innis\Nostr\Relay\Domain\ValueObject\RateLimitConfig;
 use Innis\Nostr\Relay\Domain\ValueObject\RelayPolicyConfig;
+use Innis\Nostr\Relay\Infrastructure\EventStore\InMemoryEventStore;
 use Innis\Nostr\Relay\Infrastructure\Http\StaticNip11InfoProvider;
 use Innis\Nostr\Relay\Infrastructure\RateLimiting\StaticRateLimitPolicy;
 use Innis\Nostr\Relay\Infrastructure\Server\RelayServerFactory;
@@ -47,7 +47,7 @@ final class RelayRoundTripSmokeTest extends TestCase
             self::markTestSkipped('innis/nostr-relay (dev dependency) is not installed');
         }
 
-        $store = new InMemoryRelayEventStore();
+        $store = new InMemoryEventStore();
         $httpServer = $this->startRelay($store);
         $client = NostrClientFactory::create();
 
@@ -81,7 +81,7 @@ final class RelayRoundTripSmokeTest extends TestCase
         }
     }
 
-    private function startRelay(InMemoryRelayEventStore $store): SocketHttpServer
+    private function startRelay(InMemoryEventStore $store): SocketHttpServer
     {
         $config = new LoopbackRelayConfig();
         $logger = new NullLogger();

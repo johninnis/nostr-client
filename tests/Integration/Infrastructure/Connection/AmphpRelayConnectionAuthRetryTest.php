@@ -14,6 +14,7 @@ use Innis\Nostr\Client\Tests\Support\RecordingAuthResultListener;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 
@@ -28,7 +29,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     {
         $relayUrl = $this->relayUrl();
         $event = EventMother::textNote();
-        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+        $authEvent = EventMother::auth($relayUrl, Challenge::fromString(self::CHALLENGE));
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -59,7 +60,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     {
         $relayUrl = $this->relayUrl();
         $event = EventMother::textNote();
-        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+        $authEvent = EventMother::auth($relayUrl, Challenge::fromString(self::CHALLENGE));
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -87,7 +88,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     {
         $relayUrl = $this->relayUrl();
         $event = EventMother::textNote();
-        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+        $authEvent = EventMother::auth($relayUrl, Challenge::fromString(self::CHALLENGE));
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -145,7 +146,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAuthAcceptedNotifiesTheAuthResultListener(): void
     {
         $relayUrl = $this->relayUrl();
-        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+        $authEvent = EventMother::auth($relayUrl, Challenge::fromString(self::CHALLENGE));
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);
@@ -165,7 +166,7 @@ final class AmphpRelayConnectionAuthRetryTest extends TestCase
     public function testAuthRejectedNotifiesTheAuthResultListenerWithTheReason(): void
     {
         $relayUrl = $this->relayUrl();
-        $authEvent = EventMother::auth($relayUrl, self::CHALLENGE);
+        $authEvent = EventMother::auth($relayUrl, Challenge::fromString(self::CHALLENGE));
 
         $ws = new ScriptedWebsocketConnection();
         $connection = $this->connect($ws, $relayUrl, $authEvent);

@@ -36,6 +36,7 @@ use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -146,7 +147,7 @@ $client->setAuthHandler(new class($keyPair, $signer) implements AuthChallengeHan
     }
 
     #[Override]
-    public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
+    public function handleAuthChallenge(RelayUrl $relayUrl, Challenge $challenge): ?Event
     {
         // Half the time decline, to exercise both the retry-flush and the no-signed-event paths.
         if (0 === mt_rand(0, 1)) {
