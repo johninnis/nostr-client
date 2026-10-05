@@ -6,11 +6,14 @@ namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\NoticeMessage;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
+use InvalidArgumentException;
+use Override;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final readonly class NoticeMessageHandler
+final readonly class NoticeMessageHandler implements InboundMessageHandlerInterface
 {
     private const string APPLICATION_PING_NOTICE = 'ping';
     private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
@@ -19,7 +22,22 @@ final readonly class NoticeMessageHandler
     {
     }
 
-    public function handle(NoticeMessage $message, RelaySession $session): void
+    #[Override]
+    public function handledMessageType(): string
+    {
+        return NoticeMessage::class;
+    }
+
+    #[Override]
+    public function handle(RelayMessage $message, RelaySession $session): void
+    {
+        match (true) {
+            $message instanceof NoticeMessage => $this->handleNotice($message, $session),
+            default => throw new InvalidArgumentException('NoticeMessageHandler cannot handle '.$message::class),
+        };
+    }
+
+    private function handleNotice(NoticeMessage $message, RelaySession $session): void
     {
         $notice = $message->getMessage();
         $relayUrl = $session->getConnection()->getRelayUrl();

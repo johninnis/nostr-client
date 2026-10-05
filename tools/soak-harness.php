@@ -11,8 +11,8 @@ declare(strict_types=1);
  * randomised operation churn with auto-reconnect.
  *
  * Invariants checked:
- *   - only a ConnectionException may escape a client operation; any other throwable
- *     is a defect and fails the run;
+ *   - nothing escapes a client operation: an unreachable or dropped relay is a
+ *     returned outcome, so any throwable is a defect and fails the run;
  *   - the process completes every iteration (no hang, no fatal);
  *   - live connections never exceed the relay count (no session leak);
  *   - resident memory does not trend upward across the run (no unbounded retention).
@@ -24,8 +24,8 @@ require __DIR__.'/../vendor/autoload.php';
 
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
@@ -33,12 +33,14 @@ use Innis\Nostr\Client\Tests\Support\SuppliedWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
 use Innis\Nostr\Core\Domain\Factory\RumourFactory;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
+use Innis\Nostr\Core\Domain\ValueObject\Content\EventContent;
+use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayChallenge;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Rumour;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 
@@ -136,7 +138,7 @@ $connector = new SuppliedWebsocketConnector(static function () use (&$hostileFra
 });
 
 $client = new MultiRelayNostrClient(
-    new AmphpRelayConnection(new ConnectionFactory($connector), new JsonMessageDeserialiser()),
+    new AmphpRelayConnection(new ConnectionFactory($connector)),
 );
 
 $client->setAuthHandler(new class($keyPair, $signer) implements AuthChallengeHandlerInterface {
@@ -147,14 +149,14 @@ $client->setAuthHandler(new class($keyPair, $signer) implements AuthChallengeHan
     }
 
     #[Override]
-    public function handleAuthChallenge(RelayUrl $relayUrl, Challenge $challenge): ?Event
+    public function handleAuthChallenge(RelayChallenge $relayChallenge): ?Event
     {
         // Half the time decline, to exercise both the retry-flush and the no-signed-event paths.
         if (0 === mt_rand(0, 1)) {
             return null;
         }
 
-        return RumourFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge)
+        return new RumourFactory($this->keyPair->getPublicKey())->createAuth($relayChallenge)
             ->sign($this->keyPair, $this->signer);
     }
 });
@@ -210,7 +212,6 @@ $violations = [];
 $opCounts = [];
 /** @var list<int> $memorySamples */
 $memorySamples = [];
-$connectionExceptions = 0;
 $maxConnections = 0;
 $lastSubscriptionId = null;
 
@@ -235,7 +236,7 @@ for ($step = 0; $step < $iterations; ++$step) {
             case 'subscribe':
                 $lastSubscriptionId = SubscriptionId::generate();
                 $currentSubscriptionId = (string) $lastSubscriptionId;
-                $client->subscribe($relay, new Filter(), $handler, $lastSubscriptionId);
+                $client->subscribe(SubscriptionRequest::for($relay, Filter::from(), $lastSubscriptionId), $handler);
                 break;
             case 'unsubscribe':
                 if (null !== $lastSubscriptionId) {
@@ -243,7 +244,7 @@ for ($step = 0; $step < $iterations; ++$step) {
                 }
                 break;
             case 'publish':
-                $note = RumourFactory::createTextNote($keyPair->getPublicKey(), 'soak note')->sign($keyPair, $signer);
+                $note = Rumour::draft($keyPair->getPublicKey(), EventKind::fromInt(EventKind::TEXT_NOTE), EventContent::fromString('soak note'))->sign($keyPair, $signer);
                 $client->publishEvent($relay, $note)->ignore();
                 break;
             case 'ping':
@@ -256,8 +257,6 @@ for ($step = 0; $step < $iterations; ++$step) {
                 $client->close();
                 break;
         }
-    } catch (ConnectionException) {
-        ++$connectionExceptions;
     } catch (Throwable $e) {
         $violations[] = [
             'iteration' => $step,
@@ -307,7 +306,6 @@ $mib = static fn (int $bytes): string => number_format($bytes / 1048576, 1).' Mi
 echo "== Soak + hostile-relay harness ==\n";
 echo sprintf("seed=%d relays=%d iterations=%d elapsed=%dms\n", $seed, $relayCount, $iterations, $elapsedMs);
 echo sprintf("operations: %s\n", json_encode($opCounts, JSON_THROW_ON_ERROR));
-echo sprintf("connection-exceptions (expected): %d\n", $connectionExceptions);
 echo sprintf("events-delivered=%d notices-delivered=%d\n", $handler->events, $handler->notices);
 echo sprintf("max live connections: %d (relay count %d)\n", $maxConnections, $relayCount);
 echo sprintf("memory: early=%s late=%s growth=%s peak=%s\n", $mib($earlyMedian), $mib($lateMedian), $mib($growthBytes), $mib($peakBytes));
@@ -318,7 +316,7 @@ $connectionLeak = $maxConnections > $relayCount;
 $ok = [] === $violations && !$leak && !$connectionLeak && 0 === $leftConnected;
 
 if ([] !== $violations) {
-    echo "\nINVARIANT VIOLATIONS (only ConnectionException may escape):\n";
+    echo "\nINVARIANT VIOLATIONS (nothing may escape):\n";
     foreach (array_slice($violations, 0, 20) as $violation) {
         echo sprintf("  iter %d op %s -> %s\n", $violation['iteration'], $violation['operation'], $violation['error']);
     }

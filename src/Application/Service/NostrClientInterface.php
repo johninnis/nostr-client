@@ -13,11 +13,12 @@ use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\ConnectResult;
+use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
-use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
@@ -29,11 +30,11 @@ interface NostrClientInterface
 
     public function setAuthResultListener(AuthResultListenerInterface $listener): void;
 
-    public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): void;
+    public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): ConnectResult;
 
     public function disconnect(RelayUrl $relay): void;
 
-    public function reconnect(RelayUrl $relay): void;
+    public function reconnect(RelayUrl $relay): ConnectResult;
 
     /**
      * @return Future<PublishResult>
@@ -42,27 +43,13 @@ interface NostrClientInterface
 
     public function awaitPendingPublishes(RelayUrl $relay, ?float $timeoutSeconds = null): void;
 
-    // Deliberate: relay target, filter, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
-    public function subscribe(
-        RelayUrl $relay,
-        Filter $filter,
-        EventHandlerInterface $handler,
-        ?SubscriptionId $subscriptionId = null,
-    ): SubscriptionId;
-
-    // Deliberate: relay target, filters, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
-    public function subscribeMultiple(
-        RelayUrl $relay,
-        FilterCollection $filters,
-        EventHandlerInterface $handler,
-        ?SubscriptionId $subscriptionId = null,
-    ): SubscriptionId;
+    public function subscribe(SubscriptionRequest $request, EventHandlerInterface $handler): SubscriptionId;
 
     public function unsubscribe(RelayUrl $relay, SubscriptionId $subscriptionId): void;
 
     public function isConnected(RelayUrl $relay): bool;
 
-    public function ping(RelayUrl $relay): void;
+    public function ping(RelayUrl $relay): HealthCheckResult;
 
     public function getConnection(RelayUrl $relay): ?RelayConnection;
 

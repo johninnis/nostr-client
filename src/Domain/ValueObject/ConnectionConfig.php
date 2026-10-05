@@ -20,6 +20,8 @@ final readonly class ConnectionConfig
         private int $reconnectMaxDelayMs = 60000,
         private int $reconnectMaxAttempts = 0,
         private int $heartbeatIntervalMs = 30000,
+        private int $authTimeoutMs = 60000,
+        private int $publishTimeoutMs = 8000,
     ) {
         if ($connectionTimeoutSeconds <= 0) {
             throw new InvalidArgumentException('Connection timeout must be positive');
@@ -39,6 +41,14 @@ final readonly class ConnectionConfig
 
         if ($heartbeatIntervalMs < 0) {
             throw new InvalidArgumentException('Heartbeat interval must be zero or positive');
+        }
+
+        if ($authTimeoutMs <= 0) {
+            throw new InvalidArgumentException('Auth timeout must be positive');
+        }
+
+        if ($publishTimeoutMs <= 0) {
+            throw new InvalidArgumentException('Publish timeout must be positive');
         }
     }
 
@@ -83,6 +93,16 @@ final readonly class ConnectionConfig
     public function getHeartbeatIntervalMs(): int
     {
         return $this->heartbeatIntervalMs;
+    }
+
+    public function getAuthTimeoutMs(): int
+    {
+        return $this->authTimeoutMs;
+    }
+
+    public function getPublishTimeoutMs(): int
+    {
+        return $this->publishTimeoutMs;
     }
 
     public function baseBackoffMs(int $attempt): int

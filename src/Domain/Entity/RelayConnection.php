@@ -79,7 +79,7 @@ final readonly class RelayConnection
 
     public function hasSubscription(SubscriptionId $subscriptionId): bool
     {
-        return $this->subscriptions->has($subscriptionId);
+        return null !== $this->subscriptions->get($subscriptionId);
     }
 
     public function getSubscriptions(): SubscriptionCollection
@@ -89,7 +89,7 @@ final readonly class RelayConnection
 
     public function getSubscriptionState(SubscriptionId $subscriptionId): ?SubscriptionState
     {
-        return $this->subscriptions->getState($subscriptionId);
+        return $this->subscriptions->get($subscriptionId)?->getState();
     }
 
     public function getSubscriptionCount(): int

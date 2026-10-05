@@ -7,17 +7,19 @@ namespace Innis\Nostr\Client\Tests\Integration\Acceptance;
 use Amp\Http\Server\DefaultErrorHandler;
 use Amp\Http\Server\SocketHttpServer;
 use Amp\Socket\InternetAddress;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Client\Tests\Support\CapturingEventHandler;
 use Innis\Nostr\Client\Tests\Support\LoopbackRelayConfig;
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Collection\PublicKeyCollection;
-use Innis\Nostr\Core\Domain\Factory\RumourFactory;
+use Innis\Nostr\Core\Domain\ValueObject\Content\EventContent;
 use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Nip11Info;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Rumour;
 use Innis\Nostr\Core\Infrastructure\Crypto\NativeRandomBytesGenerator;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 use Innis\Nostr\Relay\Application\Service\InMemoryAuthenticationRegistry;
@@ -60,17 +62,17 @@ final class RelayRoundTripSmokeTest extends TestCase
 
             $signer = Secp256k1Signer::create();
             $keyPair = KeyPair::generate($signer);
-            $event = RumourFactory::createTextNote($keyPair->getPublicKey(), 'nostr-client smoke test')->sign($keyPair, $signer);
+            $event = Rumour::draft($keyPair->getPublicKey(), EventKind::fromInt(EventKind::TEXT_NOTE), EventContent::fromString('nostr-client smoke test'))->sign($keyPair, $signer);
 
             $publish = $client->publishEvent($relayUrl, $event)->await();
             self::assertTrue($publish->isAccepted(), 'the relay accepted the event: '.$publish->getMessage());
 
             $handler = new CapturingEventHandler();
-            $filter = new Filter(
+            $filter = Filter::from(
                 authors: PublicKeyCollection::fromHexValues([$keyPair->getPublicKey()->toHex()]),
                 kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]),
             );
-            $client->subscribe($relayUrl, $filter, $handler);
+            $client->subscribe(SubscriptionRequest::for($relayUrl, $filter), $handler);
 
             $received = $handler->awaitFirstEvent(self::ROUND_TRIP_TIMEOUT_SECONDS);
 
@@ -92,13 +94,13 @@ final class RelayRoundTripSmokeTest extends TestCase
             eventStore: $store,
             policy: new RelayPolicy($authenticationRegistry, $logger, $policyConfig),
             config: $config,
-            rateLimitPolicy: new StaticRateLimitPolicy(new RateLimitConfig(eventsPerMinute: 600, subscriptionsPerMinute: 600)),
-            authenticationRegistry: $authenticationRegistry,
-            logger: $logger,
-            nip11InfoProvider: new StaticNip11InfoProvider(
+        )
+            ->withRateLimitPolicy(new StaticRateLimitPolicy(new RateLimitConfig(eventsPerMinute: 600, subscriptionsPerMinute: 600)))
+            ->withAuthenticationRegistry($authenticationRegistry)
+            ->withNip11InfoProvider(new StaticNip11InfoProvider(
                 Nip11Info::fromArray($config->getRelayUrl(), ['name' => 'nostr-client smoke test', 'supported_nips' => [1, 11]]),
-            ),
-        );
+            ))
+            ->withLogger($logger);
 
         $httpServer = SocketHttpServer::createForDirectAccess($logger);
         $httpServer->expose(new InternetAddress('127.0.0.1', 0));

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 
 use Amp\Websocket\Client\WebsocketConnection;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\EventMother;
@@ -15,7 +15,6 @@ use Innis\Nostr\Client\Tests\Support\SendFailingWebsocketConnection;
 use Innis\Nostr\Client\Tests\Support\SuppliedWebsocketConnector;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
@@ -29,9 +28,10 @@ use function Amp\delay;
  * Drives the connection handler through randomised interleavings of every operation
  * against sockets that succeed, sockets that fail every send, and sockets dropped
  * mid-session. The connection state machine is where the concurrency invariants live,
- * so it is fuzzed directly rather than behind the guarding facade. The invariant: only
- * a ConnectionException may escape an operation — any other throwable (an illegal state
- * transition, an unhandled fault) fails the run, and the seed reproduces it.
+ * so it is fuzzed directly rather than behind the guarding facade. The invariant: nothing
+ * escapes an operation: an unreachable or dropped relay is a returned outcome, so any
+ * throwable (an illegal state transition, an unhandled fault) fails the run, and the
+ * seed reproduces it.
  */
 final class ConnectionFuzzTest extends TestCase
 {
@@ -46,7 +46,7 @@ final class ConnectionFuzzTest extends TestCase
     }
 
     #[DataProvider('seeds')]
-    public function testRandomOperationInterleavingsOnlyEverLeakAConnectionException(int $seed): void
+    public function testRandomOperationInterleavingsNeverLeakAThrowable(int $seed): void
     {
         mt_srand($seed);
 
@@ -60,7 +60,7 @@ final class ConnectionFuzzTest extends TestCase
 
             return $socket;
         });
-        $connection = new AmphpRelayConnection(new ConnectionFactory($connector), new JsonMessageDeserialiser());
+        $connection = new AmphpRelayConnection(new ConnectionFactory($connector));
 
         $operations = $this->operations();
         $lastSubscriptionId = null;
@@ -77,15 +77,13 @@ final class ConnectionFuzzTest extends TestCase
                         reconnectMaxAttempts: 3,
                     )),
                     'disconnect' => $connection->disconnect($relay),
-                    'subscribe' => $connection->subscribe($relay, $lastSubscriptionId = SubscriptionId::generate(), new Filter(), $this->noopHandler()),
+                    'subscribe' => $connection->subscribe(SubscriptionRequest::for($relay, Filter::from(), $lastSubscriptionId = SubscriptionId::generate()), $this->noopHandler()),
                     'unsubscribe' => null !== $lastSubscriptionId ? $connection->unsubscribe($relay, $lastSubscriptionId) : null,
                     'publish' => $connection->publishEvent($relay, EventMother::textNote())->ignore(),
                     'ping' => $connection->ping($relay),
                     'drop' => $this->dropRandomSocket($sockets),
                     default => null,
                 };
-            } catch (ConnectionException) {
-                continue;
             } finally {
                 delay(0);
             }

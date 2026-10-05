@@ -10,7 +10,6 @@ use Innis\Nostr\Client\Application\Service\NostrClientInterface;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Infrastructure\Connection\WebsocketHealthChecker;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -19,8 +18,7 @@ final class NostrClientFactory
     public static function create(LoggerInterface $logger = new NullLogger()): NostrClientInterface
     {
         $connectionFactory = new ConnectionFactory();
-        $deserialiser = new JsonMessageDeserialiser();
-        $amphpConnection = new AmphpRelayConnection($connectionFactory, $deserialiser, $logger);
+        $amphpConnection = new AmphpRelayConnection($connectionFactory, $logger);
 
         return new MultiRelayNostrClient($amphpConnection, $logger);
     }

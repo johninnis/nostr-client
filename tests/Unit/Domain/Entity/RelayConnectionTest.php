@@ -65,7 +65,7 @@ final class RelayConnectionTest extends TestCase
     public function testSubscriptionManagement(): void
     {
         $subscriptionId = SubscriptionId::generate();
-        $filter = new Filter();
+        $filter = Filter::from();
 
         $this->assertFalse($this->connection->hasSubscription($subscriptionId));
         $this->assertSame(0, $this->connection->getSubscriptionCount());
@@ -74,7 +74,7 @@ final class RelayConnectionTest extends TestCase
 
         $this->assertTrue($withSub->hasSubscription($subscriptionId));
         $this->assertSame(1, $withSub->getSubscriptionCount());
-        $this->assertTrue($withSub->getSubscriptions()->has($subscriptionId));
+        $this->assertNotNull($withSub->getSubscriptions()->get($subscriptionId));
         $this->assertFalse($this->connection->hasSubscription($subscriptionId));
 
         $withoutSub = $withSub->withoutSubscription($subscriptionId);
@@ -98,7 +98,7 @@ final class RelayConnectionTest extends TestCase
     {
         $subscriptionId = SubscriptionId::generate();
 
-        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
+        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([Filter::from()]));
 
         $this->assertSame(SubscriptionState::Pending, $connection->getSubscriptionState($subscriptionId));
     }
@@ -107,7 +107,7 @@ final class RelayConnectionTest extends TestCase
     {
         $subscriptionId = SubscriptionId::generate();
 
-        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]), SubscriptionState::Active);
+        $connection = $this->connection->withSubscription($subscriptionId, new FilterCollection([Filter::from()]), SubscriptionState::Active);
 
         $this->assertSame(SubscriptionState::Active, $connection->getSubscriptionState($subscriptionId));
     }
@@ -116,7 +116,7 @@ final class RelayConnectionTest extends TestCase
     {
         $subscriptionId = SubscriptionId::generate();
 
-        $pending = $this->connection->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
+        $pending = $this->connection->withSubscription($subscriptionId, new FilterCollection([Filter::from()]));
         $this->assertSame(SubscriptionState::Pending, $pending->getSubscriptionState($subscriptionId));
 
         $active = $pending->withSubscriptionState($subscriptionId, SubscriptionState::Active);
@@ -145,8 +145,8 @@ final class RelayConnectionTest extends TestCase
     public function testWithoutSubscriptions(): void
     {
         $connection = $this->connection
-            ->withSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]))
-            ->withSubscription(SubscriptionId::generate(), new FilterCollection([new Filter()]));
+            ->withSubscription(SubscriptionId::generate(), new FilterCollection([Filter::from()]))
+            ->withSubscription(SubscriptionId::generate(), new FilterCollection([Filter::from()]));
 
         $this->assertSame(2, $connection->getSubscriptionCount());
 

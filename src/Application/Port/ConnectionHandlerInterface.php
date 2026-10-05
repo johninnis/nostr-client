@@ -8,11 +8,12 @@ use Amp\Future;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\ConnectResult;
+use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
-use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
@@ -24,15 +25,11 @@ interface ConnectionHandlerInterface
 
     public function setAuthResultListener(AuthResultListenerInterface $listener): void;
 
-    public function connect(RelayUrl $relayUrl, ConnectionConfig $config): void;
+    public function connect(RelayUrl $relayUrl, ConnectionConfig $config): ConnectResult;
 
     public function disconnect(RelayUrl $relayUrl): void;
 
-    // Deliberate: relay target, correlation id, filter and optional handler sink are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
-    public function subscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId, Filter $filter, ?EventHandlerInterface $handler = null): void;
-
-    // Deliberate: relay target, correlation id, filters and optional handler sink are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
-    public function subscribeMultiple(RelayUrl $relayUrl, SubscriptionId $subscriptionId, FilterCollection $filters, ?EventHandlerInterface $handler = null): void;
+    public function subscribe(SubscriptionRequest $request, ?EventHandlerInterface $handler = null): void;
 
     public function unsubscribe(RelayUrl $relayUrl, SubscriptionId $subscriptionId): void;
 
@@ -43,7 +40,7 @@ interface ConnectionHandlerInterface
 
     public function awaitPendingPublishes(RelayUrl $relayUrl, ?float $timeoutSeconds = null): void;
 
-    public function ping(RelayUrl $relayUrl): void;
+    public function ping(RelayUrl $relayUrl): HealthCheckResult;
 
     public function isConnected(RelayUrl $relayUrl): bool;
 

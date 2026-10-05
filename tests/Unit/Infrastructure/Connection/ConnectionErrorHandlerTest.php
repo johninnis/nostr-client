@@ -10,8 +10,12 @@ use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionErrorHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\RelaySession;
 use Innis\Nostr\Client\Infrastructure\Connection\RelaySessionRegistry;
+use Innis\Nostr\Client\Tests\Support\RecordingEventHandler;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
+use Innis\Nostr\Core\Domain\Collection\FilterCollection;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use RuntimeException;
@@ -73,6 +77,32 @@ final class ConnectionErrorHandlerTest extends TestCase
         $result = $handler->fail($this->relayUrl(), new RuntimeException('again'));
 
         self::assertNull($result);
+    }
+
+    public function testFailSettlesAPendingPublishAsDisconnected(): void
+    {
+        $registry = new RelaySessionRegistry();
+        $this->store($registry, new ConnectionConfig());
+        $publish = $registry->find($this->relayUrl())?->trackPublish('event-id') ?? self::fail('no session');
+
+        $this->handler($registry)->fail($this->relayUrl(), new RuntimeException('boom'));
+
+        self::assertSame('disconnected', $publish->await()->getMessage());
+    }
+
+    public function testFailClosesAnOpenSubscriptionAsDisconnected(): void
+    {
+        $registry = new RelaySessionRegistry();
+        $this->store($registry, new ConnectionConfig());
+        $session = $registry->find($this->relayUrl()) ?? self::fail('no session');
+        $subscriptionId = SubscriptionId::tryFromString('sub-1') ?? self::fail('invalid subscription id');
+        $events = new RecordingEventHandler();
+        $session->setConnection($session->getConnection()->withSubscription($subscriptionId, new FilterCollection([Filter::from()])));
+        $session->setHandler($subscriptionId, $events);
+
+        $this->handler($registry)->fail($this->relayUrl(), new RuntimeException('boom'));
+
+        self::assertSame(['disconnected'], $events->closedReasons);
     }
 
     private function handler(RelaySessionRegistry $registry): ConnectionErrorHandler

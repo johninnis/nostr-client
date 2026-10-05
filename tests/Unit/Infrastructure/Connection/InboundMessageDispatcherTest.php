@@ -12,13 +12,12 @@ use Innis\Nostr\Client\Infrastructure\Connection\ClosedMessageHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\EoseMessageHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\EventMessageHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\InboundMessageDispatcher;
+use Innis\Nostr\Client\Infrastructure\Connection\InboundMessageHandlers;
 use Innis\Nostr\Client\Infrastructure\Connection\NoticeMessageHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\OkMessageHandler;
 use Innis\Nostr\Client\Infrastructure\Connection\RelaySession;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
-use Innis\Nostr\Core\Domain\Service\MessageDeserialiserInterface;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\NoticeMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -28,9 +27,7 @@ final class InboundMessageDispatcherTest extends TestCase
     public function testRoutesAMessageToTheHandlerForItsType(): void
     {
         $ws = new ScriptedWebsocketConnection();
-        $dispatcher = $this->dispatcher($this->deserialiserReturning(new NoticeMessage('ping')));
-
-        $dispatcher->dispatch($this->session($ws), 'raw');
+        $this->dispatcher()->dispatch($this->session($ws), NoticeMessage::fromString('ping')->toJson());
 
         self::assertSame(['["CLOSE","keepalive"]'], $ws->sentTexts);
     }
@@ -38,33 +35,23 @@ final class InboundMessageDispatcherTest extends TestCase
     public function testIgnoresAnUnparseableMessage(): void
     {
         $ws = new ScriptedWebsocketConnection();
-        $dispatcher = $this->dispatcher($this->deserialiserReturning(null));
-
-        $dispatcher->dispatch($this->session($ws), 'raw');
+        $this->dispatcher()->dispatch($this->session($ws), 'raw');
 
         self::assertSame([], $ws->sentTexts);
     }
 
-    private function dispatcher(MessageDeserialiserInterface $deserialiser): InboundMessageDispatcher
+    private function dispatcher(): InboundMessageDispatcher
     {
-        return new InboundMessageDispatcher(
-            $deserialiser,
-            new NullLogger(),
+        $auth = new AuthMessageHandler(new NullLogger());
+
+        return new InboundMessageDispatcher(new NullLogger(), new InboundMessageHandlers(
             new EventMessageHandler(),
-            new OkMessageHandler(),
+            new OkMessageHandler($auth),
             new EoseMessageHandler(),
-            new ClosedMessageHandler(),
+            new ClosedMessageHandler($auth),
             new NoticeMessageHandler(new NullLogger()),
-            new AuthMessageHandler(new NullLogger()),
-        );
-    }
-
-    private function deserialiserReturning(?RelayMessage $message): MessageDeserialiserInterface
-    {
-        $deserialiser = $this->createStub(MessageDeserialiserInterface::class);
-        $deserialiser->method('deserialiseRelayMessage')->willReturn($message);
-
-        return $deserialiser;
+            $auth,
+        ));
     }
 
     private function session(ScriptedWebsocketConnection $ws): RelaySession

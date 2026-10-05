@@ -4,30 +4,41 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
-use Amp\DeferredFuture;
+use Amp\ByteStream\StreamException;
+use Innis\Nostr\Client\Domain\Enum\RelayUnavailability;
+use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
+use Override;
 
-final readonly class ParkedPublish
+final readonly class ParkedPublish implements ParkedWorkInterface
 {
-    /**
-     * @param DeferredFuture<PublishResult> $deferred
-     */
-    public function __construct(
-        private string $eventIdHex,
-        private DeferredFuture $deferred,
-    ) {
+    public function __construct(private string $eventIdHex)
+    {
     }
 
-    public function getEventIdHex(): string
+    #[Override]
+    public function resume(RelaySession $session): void
     {
-        return $this->eventIdHex;
+        $deferred = $session->getPendingResponse($this->eventIdHex);
+        $event = $session->getPendingEvent($this->eventIdHex);
+
+        if (null === $deferred || null === $event) {
+            return;
+        }
+
+        $session->startPublishTimeout($this->eventIdHex);
+
+        try {
+            $session->send(new EventMessage($event));
+        } catch (ConnectionException|StreamException) {
+            $session->settlePublish($this->eventIdHex, PublishResult::unavailable(RelayUnavailability::Disconnected));
+        }
     }
 
-    /**
-     * @return DeferredFuture<PublishResult>
-     */
-    public function getDeferred(): DeferredFuture
+    #[Override]
+    public function refuse(RelaySession $session, string $reason): void
     {
-        return $this->deferred;
+        $session->settlePublish($this->eventIdHex, PublishResult::rejected($reason));
     }
 }

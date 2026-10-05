@@ -7,6 +7,7 @@ namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 use Amp\DeferredFuture;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\EventMother;
@@ -14,7 +15,6 @@ use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\EventMessage as RelayEventMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
@@ -69,7 +69,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
 
         $subscriptionId = SubscriptionId::tryFromString('sub-order');
         self::assertNotNull($subscriptionId);
-        $connection->subscribe($relayUrl, $subscriptionId, $this->kindOneFilter(), $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $this->kindOneFilter(), $subscriptionId), $handler);
 
         $ws->pushInbound($this->eventFrame('sub-order', 1));
         $ws->pushInbound($this->eventFrame('sub-order', 2));
@@ -122,7 +122,7 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
 
         $subscriptionId = SubscriptionId::tryFromString('sub-flood');
         self::assertNotNull($subscriptionId);
-        $connection->subscribe($relayUrl, $subscriptionId, $this->kindOneFilter(), $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $this->kindOneFilter(), $subscriptionId), $handler);
 
         // The first frame wedges the single dispatch fiber on the gate; the rest pile up behind it.
         // Once the connection fails the reader stops consuming, so the flood runs off the test fiber
@@ -147,7 +147,6 @@ final class AmphpRelayConnectionDispatchTest extends TestCase
     {
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($ws)),
-            new JsonMessageDeserialiser(),
         );
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));

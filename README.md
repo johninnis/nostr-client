@@ -14,7 +14,7 @@ A PHP client library for connecting to Nostr relays over WebSocket, subscribing 
 - **AMPHP async** - Non-blocking WebSocket I/O with fibers
 - **Subscription management** - Subscribe with single or multiple filters, receive events via handler callbacks
 - **Event publishing** - Publish signed events with OK response handling
-- **NIP-42 authentication** - Automatic auth challenge handling with transparent publish retry
+- **NIP-42 authentication** - Automatic auth challenge handling with transparent publish and subscription retry
 - **Connection lifecycle** - Automatic state tracking, health checks, reconnection, ping
 - **Keep-alive handling** - WebSocket heartbeats and application-level ping responses
 - **PSR-3 logging** - Standard logging interface throughout
@@ -45,6 +45,7 @@ composer require innis/nostr-client
 ### Connect and Subscribe
 
 ```php
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
@@ -75,9 +76,9 @@ $handler = new class implements EventHandlerInterface {
     public function handleNotice(RelayUrl $relayUrl, string $message): void {}
 };
 
-$filter = new Filter(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10);
+$filter = Filter::from(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10);
 
-$subscriptionId = $client->subscribe($damus, $filter, $handler);
+$subscriptionId = $client->subscribe(SubscriptionRequest::for($damus, $filter), $handler);
 
 \Amp\delay(5);
 
@@ -88,13 +89,15 @@ $client->close();
 ### Publish Events
 
 ```php
-use Innis\Nostr\Core\Domain\Factory\RumourFactory;
+use Innis\Nostr\Core\Domain\ValueObject\Content\EventContent;
+use Innis\Nostr\Core\Domain\ValueObject\Content\EventKind;
 use Innis\Nostr\Core\Domain\ValueObject\Identity\KeyPair;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Rumour;
 use Innis\Nostr\Core\Infrastructure\Crypto\Secp256k1Signer;
 
 $signer = Secp256k1Signer::create();
 $keyPair = KeyPair::generate($signer);
-$signedEvent = RumourFactory::createTextNote($keyPair->getPublicKey(), 'Hello Nostr!')
+$signedEvent = Rumour::draft($keyPair->getPublicKey(), EventKind::fromInt(EventKind::TEXT_NOTE), EventContent::fromString('Hello Nostr!'))
     ->sign($keyPair, $signer);
 
 // publishEvent() returns a Future<PublishResult>. Await it for the relay's verdict,
@@ -108,7 +111,7 @@ if ($result->isAccepted()) {
 }
 ```
 
-A relay accepting or rejecting an event (`duplicate`, `rate-limited`, `blocked`, …) is an anticipated outcome carried in the `PublishResult`; only a broken connection throws.
+A relay accepting or rejecting an event (`duplicate`, `rate-limited`, `blocked`, …) is an anticipated outcome carried in the `PublishResult`. So is a relay that cannot answer: a publish to a relay the client is not connected to, or whose connection drops before its `OK`, resolves not accepted with the message `disconnected`, and one the relay never answers within `ConnectionConfig`'s `publishTimeoutMs` (default 8000) resolves with `timeout`. These messages are the client's own and carry no reason prefix, so they are never mistaken for a relay's reason; they are the cases of `RelayUnavailability`. A publish future never errors for a relay that is down.
 
 ### Health Checking
 
@@ -133,12 +136,11 @@ foreach ($results as $result) {
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 
-$subscriptionId = $client->subscribeMultiple(
-    $relay,
-    new FilterCollection([
-        new Filter(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10),
-        new Filter(kinds: EventKindCollection::fromInts([EventKind::REACTION]), limit: 10),
-    ]),
+$subscriptionId = $client->subscribe(
+    new SubscriptionRequest($relay, new FilterCollection([
+        Filter::from(kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]), limit: 10),
+        Filter::from(kinds: EventKindCollection::fromInts([EventKind::REACTION]), limit: 10),
+    ])),
     $handler,
 );
 ```
@@ -158,19 +160,27 @@ $config = new ConnectionConfig(
     reconnectInitialDelayMs: 500,
     reconnectMaxDelayMs: 60000,
     reconnectMaxAttempts: 0,
+    authTimeoutMs: 60000,
+    publishTimeoutMs: 8000,
 );
 
-$client->connect($relay, $config);
+$result = $client->connect($relay, $config);
+
+if (!$result->isConnected()) {
+    echo "{$result->getMessage()}\n"; // "failed to connect"
+}
 ```
+
+`connect()` returns a `ConnectResult` rather than throwing: a relay that cannot be reached is an outcome, reported as `failed to connect`, and every other relay's connection is unaffected.
 
 Auto-reconnect is enabled by default. A dropped connection retries on jittered exponential backoff between `reconnectInitialDelayMs` and `reconnectMaxDelayMs`. `reconnectMaxAttempts` of `0` means unlimited retries; a positive value bounds them.
 
 ### Connection Management
 
 ```php
-$client->reconnect($relay);
+$result = $client->reconnect($relay);
 $client->disconnect($relay);
-$client->ping($relay);
+$health = $client->ping($relay);
 
 $state = $client->getConnectionStatus($relay);
 $isConnected = $client->isConnected($relay);
@@ -181,6 +191,8 @@ $all = $client->getAllConnections();
 ```
 
 `getConnectionStatus()` returns a `ConnectionState`: `DISCONNECTED`, `CONNECTED`, `DISCONNECTING`, or `FAILED`.
+
+`ping()` returns a `HealthCheckResult`, unhealthy with `disconnected` when the relay is not connected. Subscribing to a relay that is not connected returns the subscription id and closes it at once through the handler's `handleClosed()` with `disconnected`; a subscription open when the connection drops is closed the same way. Unsubscribing from a relay that is not connected does nothing.
 
 ### Reconnection Listener
 
@@ -212,12 +224,13 @@ $client->awaitPendingPublishes($relay, timeoutSeconds: 5.0);
 
 ### NIP-42 Authentication
 
-Register an auth handler to sign relay challenges. When `publishEvent()` is rejected with `auth-required`, the client completes the challenge-response flow and retransmits the queued event transparently.
+Register an auth handler to sign relay challenges. When a publish is refused with `OK false` or a subscription with `CLOSED`, prefixed `auth-required:`, the client answers the relay's challenge and parks the work. Once the relay accepts the `AUTH` with `OK true`, the event is resent and the `REQ` re-issued on the same subscription id, so neither the publish's future nor the subscription's handler sees the refusal. If the relay rejects the `AUTH`, the handler declines by returning `null`, or no verdict arrives within `ConnectionConfig`'s `authTimeoutMs` (default 60000), the parked publish resolves as rejected and the parked subscription is closed, with a reason beginning `auth-required:`. Without a registered handler the relay's refusal is returned as is.
 
 ```php
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Factory\RumourFactory;
 use Innis\Nostr\Core\Domain\Service\SignatureServiceInterface;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayChallenge;
 
 $authHandler = new class($keyPair, $signer) implements AuthChallengeHandlerInterface {
     public function __construct(
@@ -225,9 +238,9 @@ $authHandler = new class($keyPair, $signer) implements AuthChallengeHandlerInter
         private SignatureServiceInterface $signer,
     ) {}
 
-    public function handleAuthChallenge(RelayUrl $relayUrl, string $challenge): ?Event
+    public function handleAuthChallenge(RelayChallenge $relayChallenge): ?Event
     {
-        return RumourFactory::createAuth($this->keyPair->getPublicKey(), $relayUrl, $challenge)
+        return new RumourFactory($this->keyPair->getPublicKey())->createAuth($relayChallenge)
             ->sign($this->keyPair, $this->signer);
     }
 };
@@ -252,26 +265,20 @@ See [`examples/`](examples/) for complete working examples.
 
 ## Error Handling
 
-Anticipated outcomes (a well-formed operation whose answer is "no") are returned as typed values (`?T` or a `*Failure`); faults are thrown. nostr-client's faults are `ClientException` (abstract) extending `NostrException`, with `ConnectionException` (final) extending `ClientException`. Catch `NostrException` to handle faults from any `nostr-*` library, or `ConnectionException` for connection faults specifically. See [ADR-0002](docs/adr/0002-clientexception-roots-nostr-client-faults-under-nostrexception.md) for how faults are rooted.
+Anticipated outcomes (a well-formed operation whose answer is "no") are returned as typed values (`?T` or a `*Failure`); faults are thrown. For a relay client, a relay that cannot be reached, drops the connection, or never answers is an anticipated outcome, returned as that relay's result: a `ConnectResult`, a `PublishResult`, a `HealthCheckResult`, or a subscription closed with `disconnected`. It is never thrown, so one relay being down never costs the answers of the others. See [ADR-0015](docs/adr/0015-an-unreachable-relay-is-a-returned-per-relay-outcome-not-a-thrown-fault.md).
+
+What remains thrown is a broken client: a misused API, a broken invariant, a failure of the client's own machinery. nostr-client's faults are `ClientException` (abstract) extending `NostrException`, with `ConnectionException` (final) extending `ClientException`. Catch `NostrException` to handle faults from any `nostr-*` library. See [ADR-0002](docs/adr/0002-clientexception-roots-nostr-client-faults-under-nostrexception.md) for how faults are rooted.
 
 Retry logic belongs in your application layer where you have full business context.
 
 ```php
-try {
-    $result = $client->publishEvent($relay, $event)->await();
+$result = $client->publishEvent($relay, $event)->await();
 
-    if (!$result->isAccepted()) {
-        // The relay declined the event — an outcome, not a fault.
-        $this->logger->info('Relay rejected the event', [
-            'relay' => (string) $relay,
-            'reason' => $result->getMessage(),
-        ]);
-    }
-} catch (ConnectionException $e) {
-    // The connection broke mid-publish — a fault.
-    $this->logger->error('Publish failed', [
+if (!$result->isAccepted()) {
+    // The relay declined the event, or could not be reached: an outcome, not a fault.
+    $this->logger->info('Event not stored', [
         'relay' => (string) $relay,
-        'error' => $e->getMessage(),
+        'reason' => $result->getMessage(),
     ]);
 }
 ```
@@ -296,11 +303,13 @@ src/
     Collection/HealthCheckResultCollection   Typed health result collection
     Entity/RelayConnection               Connection state and subscriptions
     Enum/ConnectionState                 State machine (disconnected/connected/disconnecting/failed)
+    Enum/RelayUnavailability             The client's own outcomes for a relay that cannot answer
     ValueObject/ConnectionConfig         Connection configuration
+    ValueObject/ConnectResult            Outcome of connecting to one relay
     ValueObject/HealthCheckResult        Health check outcome
-    ValueObject/PublishResult            Relay accept/reject verdict on a publish
+    ValueObject/PublishResult            Outcome of a publish to one relay
     Exception/ClientException            Base exception (extends NostrException)
-    Exception/ConnectionException        Connection-specific errors
+    Exception/ConnectionException        Faults of the client's connection machinery
   Infrastructure/
     Connection/AmphpRelayConnection      Transport port implementation (AMPHP); drives the collaborators below
     Connection/ConnectionFactory         WebSocket connection creation
@@ -308,8 +317,9 @@ src/
     Connection/RelaySessionRegistry      Per-relay sessions, generations and reconnect cancellations
     Connection/InboundMessageDispatcher  Deserialises a frame and routes it to the matching handler
     Connection/EventMessageHandler       Inbound EVENT/OK/EOSE/CLOSED/NOTICE/AUTH handlers
-    Connection/ConnectionErrorHandler    Fails a connection: notifies subscribers, errors pending publishes
+    Connection/ConnectionErrorHandler    Fails a connection: closes subscriptions, settles pending publishes
     Connection/ParkedPublish             Publish parked on a NIP-42 auth challenge
+    Connection/ParkedSubscription        Subscription parked on a NIP-42 auth challenge
     Connection/WebsocketHealthChecker    Standalone relay health checker
     Factory/NostrClientFactory           Dependency wiring
 ```

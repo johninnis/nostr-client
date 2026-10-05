@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 
+use Error;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
+use Innis\Nostr\Client\Tests\Support\ProgrammableWebsocketConnector;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 
@@ -54,5 +56,16 @@ final class ConnectionFactoryTest extends TestCase
         $this->expectException(ConnectionException::class);
 
         $this->factory->createConnection($relayUrl, $config);
+    }
+
+    public function testAFaultOfTheClientWhileConnectingIsNotDressedAsAnUnreachableRelay(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+        $factory = new ConnectionFactory(new ProgrammableWebsocketConnector([new Error('broken invariant')]));
+
+        $this->expectException(Error::class);
+
+        $factory->createConnection($relayUrl, new ConnectionConfig());
     }
 }

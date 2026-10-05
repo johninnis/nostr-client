@@ -21,11 +21,11 @@ use Amp\Websocket\Client\WebsocketHandshake;
 use Amp\Websocket\ConstantRateLimit;
 use Amp\Websocket\Parser\Rfc6455ParserFactory;
 use Amp\Websocket\PeriodicHeartbeatQueue;
+use Exception;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Override;
-use Throwable;
 
 final class ConnectionFactory
 {
@@ -48,7 +48,7 @@ final class ConnectionFactory
             $handshake = $this->createHandshake($relayUrl, $config);
 
             return $this->connector->connect($handshake, $cancellation);
-        } catch (Throwable $e) {
+        } catch (Exception $e) {
             throw ConnectionException::forRelay($relayUrl, 'Failed to establish WebSocket connection', $e);
         }
     }

@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
+use Innis\Nostr\Client\Domain\Enum\RelayUnavailability;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Domain\Collection\SubscriptionCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Psr\Log\LoggerInterface;
@@ -40,8 +41,14 @@ final readonly class ConnectionErrorHandler
         $activeSubscriptions = $session->getConnection()->getSubscriptions();
         $session->setConnection($session->getConnection()->withState(ConnectionState::FAILED)->withoutSubscriptions());
 
-        $this->notifySubscribers($session, $activeSubscriptions, $error);
-        $this->failPendingPublishes($session, $error);
+        $this->logger->warning('Relay connection dropped', [
+            'relay' => (string) $relayUrl,
+            'error' => $error->getMessage(),
+        ]);
+
+        $this->notifySubscribers($session, $activeSubscriptions);
+        $session->settleAllPublishes(PublishResult::unavailable(RelayUnavailability::Disconnected));
+        $session->takeParked();
 
         $session->loseWebsocket();
         $this->registry->cancelHeartbeat($relayUrl);
@@ -49,7 +56,7 @@ final readonly class ConnectionErrorHandler
         return $config->isAutoReconnect() ? $config : null;
     }
 
-    private function notifySubscribers(RelaySession $session, SubscriptionCollection $subscriptions, Throwable $error): void
+    private function notifySubscribers(RelaySession $session, SubscriptionCollection $subscriptions): void
     {
         foreach ($subscriptions as $subscription) {
             $subscriptionId = $subscription->getId();
@@ -57,7 +64,7 @@ final readonly class ConnectionErrorHandler
                 $handler = $session->getHandler($subscriptionId);
                 $session->removeHandler($subscriptionId);
 
-                $handler?->handleClosed($subscriptionId, 'Connection error: '.$error->getMessage());
+                $handler?->handleClosed($subscriptionId, RelayUnavailability::Disconnected->value);
             } catch (Throwable $e) {
                 $this->logger->warning('Failed to notify handler of connection error', [
                     'relay' => (string) $session->getConnection()->getRelayUrl(),
@@ -65,20 +72,6 @@ final readonly class ConnectionErrorHandler
                     'error' => $e->getMessage(),
                 ]);
             }
-        }
-    }
-
-    private function failPendingPublishes(RelaySession $session, Throwable $error): void
-    {
-        $relayUrl = $session->getConnection()->getRelayUrl();
-
-        foreach ($session->pendingResponses() as $key => $deferred) {
-            $session->removePendingResponse($key);
-            $deferred->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
-        }
-
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $parked->getDeferred()->error(ConnectionException::forRelay($relayUrl, $error->getMessage(), $error));
         }
     }
 }

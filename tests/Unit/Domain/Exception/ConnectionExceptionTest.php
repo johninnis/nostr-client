@@ -22,10 +22,9 @@ final class ConnectionExceptionTest extends TestCase
 
     public function testBasicConstructor(): void
     {
-        $exception = new ConnectionException('Test message', 123);
+        $exception = new ConnectionException('Test message');
 
         $this->assertSame('Test message', $exception->getMessage());
-        $this->assertSame(123, $exception->getCode());
         $this->assertNull($exception->getRelayUrl());
         $this->assertNull($exception->getPrevious());
     }
@@ -33,10 +32,9 @@ final class ConnectionExceptionTest extends TestCase
     public function testConstructorWithRelayUrl(): void
     {
         $previous = new Exception('Previous exception');
-        $exception = new ConnectionException('Test message', 456, $previous, $this->relayUrl);
+        $exception = new ConnectionException('Test message', $previous, $this->relayUrl);
 
         $this->assertSame('Test message', $exception->getMessage());
-        $this->assertSame(456, $exception->getCode());
         $this->assertSame($this->relayUrl, $exception->getRelayUrl());
         $this->assertSame($previous, $exception->getPrevious());
     }

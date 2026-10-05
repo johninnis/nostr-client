@@ -11,7 +11,6 @@ use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\ProgrammableWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\RecordingReconnectionListener;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -142,7 +141,6 @@ final class AmphpRelayConnectionReconnectTest extends TestCase
     {
         return new AmphpRelayConnection(
             new ConnectionFactory($connector),
-            new JsonMessageDeserialiser(),
         );
     }
 

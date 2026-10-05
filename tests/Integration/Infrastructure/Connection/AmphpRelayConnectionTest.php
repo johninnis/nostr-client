@@ -7,6 +7,7 @@ namespace Innis\Nostr\Client\Tests\Integration\Infrastructure\Connection;
 use Amp\Websocket\WebsocketMessage;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Connection\AmphpRelayConnection;
 use Innis\Nostr\Client\Infrastructure\Connection\ConnectionFactory;
 use Innis\Nostr\Client\Tests\Support\ControllableWebsocketConnection;
@@ -15,8 +16,8 @@ use Innis\Nostr\Client\Tests\Support\FakeWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\QueueWebsocketConnector;
 use Innis\Nostr\Client\Tests\Support\ScriptedWebsocketConnection;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
+use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
-use Innis\Nostr\Core\Domain\Service\JsonMessageDeserialiser;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
@@ -35,7 +36,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $websocket = new FakeWebsocketConnection(WebsocketMessage::fromText('["NOTICE","ping"]'));
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($websocket)),
-            new JsonMessageDeserialiser(),
         );
 
         $handler = $this->createMock(EventHandlerInterface::class);
@@ -47,7 +47,7 @@ final class AmphpRelayConnectionTest extends TestCase
         self::assertNotNull($subscriptionId);
         $filter = Filter::tryFromArray(['kinds' => [1]]);
         self::assertNotNull($filter);
-        $connection->subscribe($relayUrl, $subscriptionId, $filter, $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $filter, $subscriptionId), $handler);
 
         delay(0.1);
 
@@ -65,7 +65,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $websocket = new ControllableWebsocketConnection();
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($websocket)),
-            new JsonMessageDeserialiser(),
         );
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 20));
@@ -85,7 +84,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $websocket = new ControllableWebsocketConnection();
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($websocket)),
-            new JsonMessageDeserialiser(),
         );
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 20));
@@ -107,7 +105,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $websocket = new ControllableWebsocketConnection();
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($websocket)),
-            new JsonMessageDeserialiser(),
         );
 
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false, heartbeatIntervalMs: 0));
@@ -135,7 +132,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $websocket = new FakeWebsocketConnection(WebsocketMessage::fromText('["NOTICE","relay is shutting down"]'));
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($websocket)),
-            new JsonMessageDeserialiser(),
         );
 
         $handler = $this->createMock(EventHandlerInterface::class);
@@ -153,8 +149,8 @@ final class AmphpRelayConnectionTest extends TestCase
         self::assertNotNull($first);
         self::assertNotNull($second);
 
-        $connection->subscribe($relayUrl, $first, $filter, $handler);
-        $connection->subscribe($relayUrl, $second, $filter, $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $filter, $first), $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $filter, $second), $handler);
 
         delay(0.1);
     }
@@ -167,7 +163,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $ws = new ScriptedWebsocketConnection();
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new FakeWebsocketConnector($ws)),
-            new JsonMessageDeserialiser(),
         );
 
         $subscriptionId = SubscriptionId::tryFromString('sub-1');
@@ -182,7 +177,7 @@ final class AmphpRelayConnectionTest extends TestCase
         $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
         delay(0.01);
 
-        $connection->subscribe($relayUrl, $subscriptionId, $filter, $handler);
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $filter, $subscriptionId), $handler);
         delay(0.01);
         self::assertSame(SubscriptionState::Active, $connection->getConnection($relayUrl)?->getSubscriptionState($subscriptionId));
 
@@ -197,6 +192,61 @@ final class AmphpRelayConnectionTest extends TestCase
         $connection->disconnect($relayUrl);
     }
 
+    public function testASubscriptionNoFilterOfWhichCanMatchEndsAtOnceWithoutARequest(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($ws)),
+        );
+
+        $subscriptionId = SubscriptionId::generate();
+        $unmatchable = Filter::tryFromArray(['authors' => []]);
+        self::assertNotNull($unmatchable);
+
+        $handler = $this->createMock(EventHandlerInterface::class);
+        $handler->expects(self::once())->method('handleEose')->with($subscriptionId);
+        $handler->expects(self::never())->method('handleClosed');
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+        delay(0.01);
+
+        $connection->subscribe(SubscriptionRequest::for($relayUrl, $unmatchable, $subscriptionId), $handler);
+        delay(0.01);
+
+        self::assertSame([], array_values(array_filter($ws->sentTexts, static fn (string $text): bool => str_starts_with($text, '["REQ"'))));
+        self::assertFalse($connection->getConnection($relayUrl)?->hasSubscription($subscriptionId));
+
+        $connection->disconnect($relayUrl);
+    }
+
+    public function testASubscriptionSendsOnlyTheFiltersThatCanMatch(): void
+    {
+        $relayUrl = RelayUrl::tryFromString('wss://relay.test');
+        self::assertNotNull($relayUrl);
+
+        $ws = new ScriptedWebsocketConnection();
+        $connection = new AmphpRelayConnection(
+            new ConnectionFactory(new FakeWebsocketConnector($ws)),
+        );
+        $filters = FilterCollection::tryFromArray([['kinds' => []], ['kinds' => [1]]]);
+        self::assertNotNull($filters);
+        $subscriptionId = SubscriptionId::tryFromString('sub-1');
+        self::assertNotNull($subscriptionId);
+
+        $connection->connect($relayUrl, new ConnectionConfig(autoReconnect: false));
+        delay(0.01);
+
+        $connection->subscribe(new SubscriptionRequest($relayUrl, $filters, $subscriptionId));
+        delay(0.01);
+
+        self::assertContains('["REQ","sub-1",{"kinds":[1]}]', $ws->sentTexts);
+
+        $connection->disconnect($relayUrl);
+    }
+
     public function testSupersededMessageLoopDoesNotDisturbTheReplacementConnection(): void
     {
         $relayUrl = RelayUrl::tryFromString('wss://relay.test');
@@ -206,7 +256,6 @@ final class AmphpRelayConnectionTest extends TestCase
         $live = new ControllableWebsocketConnection();
         $connection = new AmphpRelayConnection(
             new ConnectionFactory(new QueueWebsocketConnector([$stale, $live])),
-            new JsonMessageDeserialiser(),
         );
 
         $config = new ConnectionConfig(autoReconnect: false);

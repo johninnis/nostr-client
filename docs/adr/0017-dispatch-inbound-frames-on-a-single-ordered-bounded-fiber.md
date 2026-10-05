@@ -1,10 +1,12 @@
-# 11. Dispatch inbound frames on a single ordered fiber, bounded, so a slow handler cannot stall the reader
+# 17. Dispatch inbound frames on a single ordered fiber, bounded, so a slow handler cannot stall the reader
 
 ## Status
 
-Superseded by ADR-0017
+Accepted. Supersedes ADR-0011.
 
 ## Context
+
+ADR-0011 recorded this decision when a failed connection errored its in-flight publishes with a `ConnectionException`. ADR-0015 settles them as `disconnected` instead; nothing else changes, and this record restates the decision with that.
 
 Each live connection runs one read loop that iterates the WebSocket and dispatches every frame the relay sends. The obvious shape handles each frame inline, on the read loop's own fiber:
 
@@ -22,7 +24,7 @@ The obvious first fix — spawn a detached fiber per frame — keeps the reader 
 
 Inbound frames are drained by **one long-lived dispatch fiber over a bounded internal queue.** The read loop's only job is to move each frame into that queue and continue, so it keeps taking messages from the transport and the heartbeat stays answered. The single dispatch fiber pulls from the queue and runs `handleMessage` **sequentially, in receipt order**, so a slow or suspending handler blocks only that fiber — never the reader, and never the ordering of the frames behind it.
 
-The queue is bounded by a high-water mark (`MAX_INBOUND_BACKLOG`). Each frame is offered without blocking the reader; an offer that would push the backlog past the mark signals that the consumer has fallen that far behind, and the read loop **fails the connection** with a `ConnectionException` rather than growing memory without bound or stalling the reader. That failure travels the connection's ordinary error path — subscribers are notified, in-flight publishes error, and auto-reconnect (if enabled) starts a fresh connection with a fresh queue.
+The queue is bounded by a high-water mark (`MAX_INBOUND_BACKLOG`). Each frame is offered without blocking the reader; an offer that would push the backlog past the mark signals that the consumer has fallen that far behind, and the read loop **fails the connection** rather than growing memory without bound or stalling the reader. That failure travels the connection's ordinary error path — open subscriptions are closed and in-flight publishes settle, both as `disconnected` (ADR-0015), and auto-reconnect (if enabled) starts a fresh connection with a fresh queue.
 
 ## Consequences
 

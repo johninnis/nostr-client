@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/../vendor/autoload.php';
 
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Infrastructure\Factory\NostrClientFactory;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\EventKindCollection;
@@ -27,13 +28,15 @@ foreach ($relays as $url) {
         echo "Invalid relay URL: {$url}\n";
         continue;
     }
-    try {
-        $client->connect($relay);
-        $connectedRelays[] = $relay;
-        echo "Connected to: {$url}\n";
-    } catch (Throwable $e) {
-        echo "Failed to connect to {$url}: {$e->getMessage()}\n";
+    $result = $client->connect($relay);
+
+    if (!$result->isConnected()) {
+        echo "{$url}: {$result->getMessage()}\n";
+        continue;
     }
+
+    $connectedRelays[] = $relay;
+    echo "Connected to: {$url}\n";
 }
 
 if ([] === $connectedRelays) {
@@ -74,7 +77,7 @@ $handler = new class($eventCount) implements EventHandlerInterface {
     }
 };
 
-$filter = new Filter(
+$filter = Filter::from(
     kinds: EventKindCollection::fromInts([EventKind::TEXT_NOTE]),
     limit: 50
 );
@@ -83,7 +86,7 @@ echo "Starting stream...\n";
 
 $subscriptionIds = [];
 foreach ($connectedRelays as $relay) {
-    $subscriptionIds[] = ['relay' => $relay, 'id' => $client->subscribe($relay, $filter, $handler)];
+    $subscriptionIds[] = ['relay' => $relay, 'id' => $client->subscribe(SubscriptionRequest::for($relay, $filter), $handler)];
 }
 
 echo "Streaming for 10 seconds...\n";

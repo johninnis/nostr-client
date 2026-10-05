@@ -12,15 +12,18 @@ use Innis\Nostr\Client\Application\Service\MultiRelayNostrClient;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\ConnectResult;
+use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Client\Tests\Support\EventMother;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
+use LogicException;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -89,8 +92,10 @@ final class MultiRelayNostrClientTest extends TestCase
             ->expects($this->once())
             ->method('connect')
             ->with($this->relayUrl, $config)
-            ->willReturnCallback(function () use ($connection): void {
+            ->willReturnCallback(function () use ($connection): ConnectResult {
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
+
+                return ConnectResult::connected();
             });
 
         $manager->connect($this->relayUrl, $config);
@@ -106,8 +111,10 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $handler
             ->method('connect')
-            ->willReturnCallback(function () use ($connection): void {
+            ->willReturnCallback(function () use ($connection): ConnectResult {
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
+
+                return ConnectResult::connected();
             });
 
         $manager->connect($this->relayUrl);
@@ -125,8 +132,10 @@ final class MultiRelayNostrClientTest extends TestCase
         $handler
             ->expects($this->once())
             ->method('connect')
-            ->willReturnCallback(function () use ($connection): void {
+            ->willReturnCallback(function () use ($connection): ConnectResult {
                 $this->handlerConnections[(string) $this->relayUrl] = $connection;
+
+                return ConnectResult::connected();
             });
 
         $manager->connect($this->relayUrl, $config);
@@ -135,50 +144,86 @@ final class MultiRelayNostrClientTest extends TestCase
         $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
-    public function testConnectThrowsOnFailure(): void
+    public function testConnectReturnsTheConnectedResult(): void
     {
-        $handler = $this->createHandlerMock();
+        $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
-        $config = new ConnectionConfig();
-        $exception = new ConnectionException('Connection failed');
+        $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, new ConnectionConfig());
 
         $handler
-            ->expects($this->once())
             ->method('connect')
-            ->willThrowException($exception);
+            ->willReturnCallback(function () use ($connection): ConnectResult {
+                $this->handlerConnections[(string) $this->relayUrl] = $connection;
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Connection failed');
+                return ConnectResult::connected();
+            });
 
-        $manager->connect($this->relayUrl, $config);
+        $this->assertTrue($manager->connect($this->relayUrl)->isConnected());
     }
 
-    public function testConnectRecordsFailureWhenConnectionExists(): void
+    public function testConnectToAnAlreadyConnectedRelayReturnsConnected(): void
+    {
+        $handler = $this->createHandlerStub();
+        $manager = new MultiRelayNostrClient($handler);
+        $this->establishConnection();
+
+        $this->assertTrue($manager->connect($this->relayUrl)->isConnected());
+    }
+
+    public function testConnectReturnsFailedToConnectWhenTheRelayCannotBeReached(): void
+    {
+        $handler = $this->createHandlerStub();
+        $manager = new MultiRelayNostrClient($handler);
+
+        $handler
+            ->method('connect')
+            ->willReturn(ConnectResult::failedToConnect());
+
+        $result = $manager->connect($this->relayUrl);
+
+        $this->assertFalse($result->isConnected());
+        $this->assertSame('failed to connect', $result->getMessage());
+    }
+
+    public function testConnectReturnsFailedToConnectWhenAFailedConnectionCannotBeRestored(): void
     {
         $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
         $config = new ConnectionConfig();
         $connection = new RelayConnection($this->relayUrl, ConnectionState::CONNECTED, $config);
-        $exception = new ConnectionException('Connection failed');
 
         $connectCallCount = 0;
         $handler
             ->method('connect')
-            ->willReturnCallback(function () use (&$connectCallCount, $connection, $exception): void {
+            ->willReturnCallback(function () use (&$connectCallCount, $connection): ConnectResult {
                 ++$connectCallCount;
-                if (1 === $connectCallCount) {
-                    $this->handlerConnections[(string) $this->relayUrl] = $connection;
-                } else {
-                    throw $exception;
+                if (1 !== $connectCallCount) {
+                    return ConnectResult::failedToConnect();
                 }
+
+                $this->handlerConnections[(string) $this->relayUrl] = $connection;
+
+                return ConnectResult::connected();
             });
 
         $manager->connect($this->relayUrl, $config);
         $this->handlerConnections[(string) $this->relayUrl] = $connection->withState(ConnectionState::FAILED);
 
-        $this->expectException(ConnectionException::class);
+        $this->assertFalse($manager->connect($this->relayUrl, $config)->isConnected());
+    }
 
-        $manager->connect($this->relayUrl, $config);
+    public function testConnectPropagatesAFaultOfTheClient(): void
+    {
+        $handler = $this->createHandlerStub();
+        $manager = new MultiRelayNostrClient($handler);
+
+        $handler
+            ->method('connect')
+            ->willThrowException(new LogicException('broken invariant'));
+
+        $this->expectException(LogicException::class);
+
+        $manager->connect($this->relayUrl);
     }
 
     public function testDisconnectRemovesConnection(): void
@@ -217,11 +262,11 @@ final class MultiRelayNostrClientTest extends TestCase
             ->willReturnCallback(function () use ($subscriptionId): void {
                 $url = (string) $this->relayUrl;
                 $this->handlerConnections[$url] = $this->handlerConnections[$url]
-                    ->withSubscription($subscriptionId, new FilterCollection([new Filter()]));
+                    ->withSubscription($subscriptionId, new FilterCollection([Filter::from()]));
             });
 
         $eventHandler = $this->createStub(EventHandlerInterface::class);
-        $manager->subscribe($this->relayUrl, new Filter(), $eventHandler, $subscriptionId);
+        $manager->subscribe(SubscriptionRequest::for($this->relayUrl, Filter::from(), $subscriptionId), $eventHandler);
 
         $this->assertTrue($this->handlerConnections[(string) $this->relayUrl]->hasSubscription($subscriptionId));
 
@@ -251,8 +296,10 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $handler
             ->method('connect')
-            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): void {
+            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): ConnectResult {
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $config);
+
+                return ConnectResult::connected();
             });
 
         $manager->reconnect($this->relayUrl);
@@ -260,17 +307,30 @@ final class MultiRelayNostrClientTest extends TestCase
         $this->assertTrue($manager->isConnected($this->relayUrl));
     }
 
-    public function testSubscribeEnsuresConnection(): void
+    public function testSubscribeToAnUnconnectedRelayClosesTheSubscriptionAsDisconnected(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
-        $filter = new Filter();
-        $eventHandler = $this->createStub(EventHandlerInterface::class);
+        $eventHandler = $this->createMock(EventHandlerInterface::class);
+        $subscriptionId = SubscriptionId::tryFromString('offline-sub');
+        self::assertNotNull($subscriptionId);
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Not connected');
+        $handler->expects($this->never())->method('subscribe');
+        $eventHandler
+            ->expects($this->once())
+            ->method('handleClosed')
+            ->with($subscriptionId, 'disconnected');
 
-        $manager->subscribe($this->relayUrl, $filter, $eventHandler);
+        $manager->subscribe(SubscriptionRequest::for($this->relayUrl, Filter::from(), $subscriptionId), $eventHandler);
+    }
+
+    public function testSubscribeToAnUnconnectedRelayStillReturnsTheSubscriptionId(): void
+    {
+        $manager = new MultiRelayNostrClient($this->createHandlerStub());
+
+        $subscriptionId = $manager->subscribe(SubscriptionRequest::for($this->relayUrl, Filter::from()), $this->createStub(EventHandlerInterface::class));
+
+        $this->assertNotSame('', (string) $subscriptionId);
     }
 
     public function testSubscribeReturnsGeneratedSubscriptionId(): void
@@ -279,14 +339,14 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
-        $filter = new Filter();
+        $filter = Filter::from();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
 
         $handler
             ->expects($this->once())
             ->method('subscribe');
 
-        $subscriptionId = $manager->subscribe($this->relayUrl, $filter, $eventHandler);
+        $subscriptionId = $manager->subscribe(SubscriptionRequest::for($this->relayUrl, $filter), $eventHandler);
 
         $this->assertNotSame('', (string) $subscriptionId);
     }
@@ -297,16 +357,16 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
-        $filter = new Filter();
+        $filter = Filter::from();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
         $explicitId = SubscriptionId::tryFromString('my-subscription');
 
         $handler
             ->expects($this->once())
             ->method('subscribe')
-            ->with($this->relayUrl, $explicitId, $filter, $eventHandler);
+            ->with(SubscriptionRequest::for($this->relayUrl, $filter, $explicitId), $eventHandler);
 
-        $returnedId = $manager->subscribe($this->relayUrl, $filter, $eventHandler, $explicitId);
+        $returnedId = $manager->subscribe(SubscriptionRequest::for($this->relayUrl, $filter, $explicitId), $eventHandler);
 
         $this->assertSame('my-subscription', (string) $returnedId);
     }
@@ -318,22 +378,23 @@ final class MultiRelayNostrClientTest extends TestCase
         $connection = $this->establishConnection();
         $eventHandler = $this->createStub(EventHandlerInterface::class);
 
-        $subscriptionId = $manager->subscribe($this->relayUrl, new Filter(), $eventHandler);
+        $subscriptionId = $manager->subscribe(SubscriptionRequest::for($this->relayUrl, Filter::from()), $eventHandler);
         $manager->unsubscribe($this->relayUrl, $subscriptionId);
 
         $this->assertFalse($connection->hasSubscription($subscriptionId));
     }
 
-    public function testPublishEventEnsuresConnection(): void
+    public function testPublishEventToAnUnconnectedRelayResolvesAsDisconnected(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
-        $event = EventMother::textNote('Test event');
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Not connected');
+        $handler->expects($this->never())->method('publishEvent');
 
-        $manager->publishEvent($this->relayUrl, $event);
+        $result = $manager->publishEvent($this->relayUrl, EventMother::textNote('Test event'))->await();
+
+        $this->assertFalse($result->isAccepted());
+        $this->assertSame('disconnected', $result->getMessage());
     }
 
     public function testPublishEventDelegatesToHandlerWhenConnected(): void
@@ -425,7 +486,8 @@ final class MultiRelayNostrClientTest extends TestCase
         $this->handlerConnections[(string) $relay2] = new RelayConnection($relay2, ConnectionState::CONNECTED, $config);
 
         $handler
-            ->method('ping');
+            ->method('ping')
+            ->willReturnCallback(static fn (RelayUrl $url): HealthCheckResult => HealthCheckResult::success($url));
 
         $results = $manager->healthCheck();
 
@@ -484,20 +546,23 @@ final class MultiRelayNostrClientTest extends TestCase
         $handler
             ->expects($this->once())
             ->method('ping')
-            ->with($this->relayUrl);
+            ->with($this->relayUrl)
+            ->willReturn(HealthCheckResult::success($this->relayUrl));
 
-        $manager->ping($this->relayUrl);
+        $this->assertTrue($manager->ping($this->relayUrl)->isHealthy());
     }
 
-    public function testPingEnsuresConnection(): void
+    public function testPingOfAnUnconnectedRelayReportsItDisconnected(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Not connected');
+        $handler->expects($this->never())->method('ping');
 
-        $manager->ping($this->relayUrl);
+        $result = $manager->ping($this->relayUrl);
+
+        $this->assertFalse($result->isHealthy());
+        $this->assertSame('disconnected', $result->getErrorMessage());
     }
 
     public function testReconnectWithUnknownRelayUsesDefaultConfig(): void
@@ -513,8 +578,10 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $handler
             ->method('connect')
-            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): void {
+            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $config): ConnectResult {
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $config);
+
+                return ConnectResult::connected();
             });
 
         $manager->reconnect($this->relayUrl);
@@ -531,9 +598,11 @@ final class MultiRelayNostrClientTest extends TestCase
         $connectConfigs = [];
         $handler
             ->method('connect')
-            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $c) use (&$connectConfigs): void {
+            ->willReturnCallback(function (RelayUrl $url, ConnectionConfig $c) use (&$connectConfigs): ConnectResult {
                 $connectConfigs[] = $c;
                 $this->handlerConnections[(string) $url] = new RelayConnection($url, ConnectionState::CONNECTED, $c);
+
+                return ConnectResult::connected();
             });
 
         $handler
@@ -549,48 +618,52 @@ final class MultiRelayNostrClientTest extends TestCase
         $this->assertSame(30, $connectConfigs[1]->getConnectionTimeoutSeconds());
     }
 
-    public function testSubscribeMultipleEnsuresConnection(): void
+    public function testSubscribeWithMultipleFiltersToAnUnconnectedRelayClosesTheSubscriptionAsDisconnected(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
-        $eventHandler = $this->createStub(EventHandlerInterface::class);
+        $eventHandler = $this->createMock(EventHandlerInterface::class);
+        $subscriptionId = SubscriptionId::tryFromString('offline-multi');
+        self::assertNotNull($subscriptionId);
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Not connected');
+        $handler->expects($this->never())->method('subscribe');
+        $eventHandler
+            ->expects($this->once())
+            ->method('handleClosed')
+            ->with($subscriptionId, 'disconnected');
 
-        $manager->subscribeMultiple($this->relayUrl, new FilterCollection([new Filter()]), $eventHandler);
+        $manager->subscribe(new SubscriptionRequest($this->relayUrl, new FilterCollection([Filter::from()]), $subscriptionId), $eventHandler);
     }
 
-    public function testSubscribeMultipleDelegatesToHandler(): void
+    public function testSubscribeWithMultipleFiltersDelegatesToHandler(): void
     {
         $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
         $this->establishConnection();
 
-        $filters = new FilterCollection([new Filter(), new Filter()]);
+        $filters = new FilterCollection([Filter::from(), Filter::from()]);
         $eventHandler = $this->createStub(EventHandlerInterface::class);
         $explicitId = SubscriptionId::tryFromString('multi-sub');
 
         $handler
             ->expects($this->once())
-            ->method('subscribeMultiple')
-            ->with($this->relayUrl, $explicitId, $filters, $eventHandler);
+            ->method('subscribe')
+            ->with(new SubscriptionRequest($this->relayUrl, $filters, $explicitId), $eventHandler);
 
-        $returnedId = $manager->subscribeMultiple($this->relayUrl, $filters, $eventHandler, $explicitId);
+        $returnedId = $manager->subscribe(new SubscriptionRequest($this->relayUrl, $filters, $explicitId), $eventHandler);
 
         $this->assertSame('multi-sub', (string) $returnedId);
     }
 
-    public function testUnsubscribeEnsuresConnection(): void
+    public function testUnsubscribeFromAnUnconnectedRelayIsANoop(): void
     {
-        $handler = $this->createHandlerStub();
+        $handler = $this->createHandlerMock();
         $manager = new MultiRelayNostrClient($handler);
 
         $subscriptionId = SubscriptionId::tryFromString('sub-1');
         self::assertNotNull($subscriptionId);
 
-        $this->expectException(ConnectionException::class);
-        $this->expectExceptionMessage('Not connected');
+        $handler->expects($this->never())->method('unsubscribe');
 
         $manager->unsubscribe($this->relayUrl, $subscriptionId);
     }
@@ -607,7 +680,7 @@ final class MultiRelayNostrClientTest extends TestCase
         $manager->disconnect($this->relayUrl);
     }
 
-    public function testHealthCheckReturnsFailureOnPingError(): void
+    public function testHealthCheckReportsARelayWhosePingFails(): void
     {
         $handler = $this->createHandlerStub();
         $manager = new MultiRelayNostrClient($handler);
@@ -616,7 +689,7 @@ final class MultiRelayNostrClientTest extends TestCase
 
         $handler
             ->method('ping')
-            ->willThrowException(new ConnectionException('Ping failed'));
+            ->willReturn(HealthCheckResult::failure($this->relayUrl, 'disconnected'));
 
         $results = $manager->healthCheck();
 
@@ -624,7 +697,7 @@ final class MultiRelayNostrClientTest extends TestCase
 
         foreach ($results as $result) {
             $this->assertFalse($result->isHealthy());
-            $this->assertSame('Ping failed', $result->getErrorMessage());
+            $this->assertSame('disconnected', $result->getErrorMessage());
         }
     }
 

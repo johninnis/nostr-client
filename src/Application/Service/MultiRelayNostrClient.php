@@ -13,14 +13,14 @@ use Innis\Nostr\Client\Domain\Collection\HealthCheckResultCollection;
 use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
+use Innis\Nostr\Client\Domain\Enum\RelayUnavailability;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
+use Innis\Nostr\Client\Domain\ValueObject\ConnectResult;
 use Innis\Nostr\Client\Domain\ValueObject\HealthCheckResult;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
+use Innis\Nostr\Client\Domain\ValueObject\SubscriptionRequest;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
-use Innis\Nostr\Core\Domain\Collection\FilterCollection;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Filter;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use Override;
@@ -33,7 +33,7 @@ use function Amp\Future\awaitAll;
 
 final class MultiRelayNostrClient implements NostrClientInterface
 {
-    /** @var array<string, Future<void>> */
+    /** @var array<string, Future<ConnectResult>> */
     private array $connectionTasks = [];
 
     public function __construct(
@@ -61,41 +61,39 @@ final class MultiRelayNostrClient implements NostrClientInterface
     }
 
     #[Override]
-    public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): void
+    public function connect(RelayUrl $relay, ?ConnectionConfig $config = null): ConnectResult
     {
         $config ??= new ConnectionConfig();
         $urlString = (string) $relay;
 
         if ($this->connectionHandler->isConnected($relay)) {
-            return;
+            return ConnectResult::connected();
         }
 
         if (isset($this->connectionTasks[$urlString])) {
-            $this->connectionTasks[$urlString]->await();
-
-            return;
+            return $this->connectionTasks[$urlString]->await();
         }
 
-        /** @var Future<void> $connecting */
-        $connecting = async(function () use ($relay, $config): void {
+        /** @var Future<ConnectResult> $connecting */
+        $connecting = async(function () use ($relay, $config): ConnectResult {
             try {
-                $this->connectionHandler->connect($relay, $config);
+                return $this->connectionHandler->connect($relay, $config);
             } finally {
                 unset($this->connectionTasks[(string) $relay]);
             }
         });
         $this->connectionTasks[$urlString] = $connecting;
 
-        try {
-            $this->connectionTasks[$urlString]->await();
-        } catch (Throwable $e) {
-            $this->logger->error('Failed to connect to relay', [
-                'relay' => (string) $relay,
-                'error' => $e->getMessage(),
-            ]);
+        $result = $connecting->await();
 
-            throw $e;
+        if (!$result->isConnected()) {
+            $this->logger->warning('Failed to connect to relay', [
+                'relay' => $urlString,
+                'reason' => $result->getMessage(),
+            ]);
         }
+
+        return $result;
     }
 
     #[Override]
@@ -117,41 +115,29 @@ final class MultiRelayNostrClient implements NostrClientInterface
     }
 
     #[Override]
-    public function reconnect(RelayUrl $relay): void
+    public function reconnect(RelayUrl $relay): ConnectResult
     {
         $connection = $this->connectionHandler->getConnection($relay);
         $config = $connection?->getConfig() ?? new ConnectionConfig();
 
         $this->disconnect($relay);
-        $this->connect($relay, $config);
+
+        return $this->connect($relay, $config);
     }
 
-    // Deliberate: relay target, filter, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
     #[Override]
-    public function subscribe(
-        RelayUrl $relay,
-        Filter $filter,
-        EventHandlerInterface $handler,
-        ?SubscriptionId $subscriptionId = null,
-    ): SubscriptionId {
-        $this->ensureConnected($relay);
-        $subscriptionId ??= SubscriptionId::generate();
-        $this->connectionHandler->subscribe($relay, $subscriptionId, $filter, $handler);
+    public function subscribe(SubscriptionRequest $request, EventHandlerInterface $handler): SubscriptionId
+    {
+        $subscriptionId = $request->getSubscriptionId() ?? SubscriptionId::generate();
+        $request = $request->withSubscriptionId($subscriptionId);
 
-        return $subscriptionId;
-    }
+        if (!$this->isConnected($request->getRelay())) {
+            $handler->handleClosed($subscriptionId, RelayUnavailability::Disconnected->value);
 
-    // Deliberate: relay target, filters, handler sink and optional correlation id are the irreducible inputs of a NIP-01 REQ; the handler is a collaborator, not data, so there is no cohesive value object to extract.
-    #[Override]
-    public function subscribeMultiple(
-        RelayUrl $relay,
-        FilterCollection $filters,
-        EventHandlerInterface $handler,
-        ?SubscriptionId $subscriptionId = null,
-    ): SubscriptionId {
-        $this->ensureConnected($relay);
-        $subscriptionId ??= SubscriptionId::generate();
-        $this->connectionHandler->subscribeMultiple($relay, $subscriptionId, $filters, $handler);
+            return $subscriptionId;
+        }
+
+        $this->connectionHandler->subscribe($request, $handler);
 
         return $subscriptionId;
     }
@@ -159,7 +145,10 @@ final class MultiRelayNostrClient implements NostrClientInterface
     #[Override]
     public function unsubscribe(RelayUrl $relay, SubscriptionId $subscriptionId): void
     {
-        $this->ensureConnected($relay);
+        if (!$this->isConnected($relay)) {
+            return;
+        }
+
         $this->connectionHandler->unsubscribe($relay, $subscriptionId);
     }
 
@@ -169,7 +158,9 @@ final class MultiRelayNostrClient implements NostrClientInterface
     #[Override]
     public function publishEvent(RelayUrl $relay, Event $event): Future
     {
-        $this->ensureConnected($relay);
+        if (!$this->isConnected($relay)) {
+            return Future::complete(PublishResult::unavailable(RelayUnavailability::Disconnected));
+        }
 
         return $this->connectionHandler->publishEvent($relay, $event);
     }
@@ -216,15 +207,7 @@ final class MultiRelayNostrClient implements NostrClientInterface
 
         foreach ($this->connectionHandler->getAllConnections() as $connection) {
             $relayUrl = $connection->getRelayUrl();
-            $healthTasks[] = async(function () use ($relayUrl) {
-                try {
-                    $this->ping($relayUrl);
-
-                    return HealthCheckResult::success($relayUrl);
-                } catch (Throwable $e) {
-                    return HealthCheckResult::failure($relayUrl, $e->getMessage());
-                }
-            });
+            $healthTasks[] = async(fn (): HealthCheckResult => $this->ping($relayUrl));
         }
 
         [, $results] = awaitAll($healthTasks);
@@ -245,18 +228,13 @@ final class MultiRelayNostrClient implements NostrClientInterface
     }
 
     #[Override]
-    public function ping(RelayUrl $relay): void
-    {
-        $this->ensureConnected($relay);
-
-        $this->connectionHandler->ping($relay);
-    }
-
-    private function ensureConnected(RelayUrl $relay): void
+    public function ping(RelayUrl $relay): HealthCheckResult
     {
         if (!$this->isConnected($relay)) {
-            throw ConnectionException::forRelay($relay, 'Not connected - use connect() first');
+            return HealthCheckResult::failure($relay, RelayUnavailability::Disconnected->value);
         }
+
+        return $this->connectionHandler->ping($relay);
     }
 
     private function unsubscribeAll(RelayUrl $relay, RelayConnection $connection): void

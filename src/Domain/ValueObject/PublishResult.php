@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Domain\ValueObject;
 
+use Innis\Nostr\Client\Domain\Enum\RelayUnavailability;
+
 final readonly class PublishResult
 {
     private function __construct(
@@ -20,6 +22,11 @@ final readonly class PublishResult
     public static function rejected(string $message): self
     {
         return new self(false, $message);
+    }
+
+    public static function unavailable(RelayUnavailability $unavailability): self
+    {
+        return new self(false, $unavailability->value);
     }
 
     public function isAccepted(): bool

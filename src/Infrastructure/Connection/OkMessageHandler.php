@@ -4,135 +4,59 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
-use Amp\DeferredFuture;
-use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
-use Innis\Nostr\Client\Application\Port\AuthResultListenerInterface;
 use Innis\Nostr\Client\Domain\Enum\OkOutcome;
-use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\EventMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\OkMessage;
-use Throwable;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
+use InvalidArgumentException;
+use Override;
 
-final class OkMessageHandler
+final readonly class OkMessageHandler implements InboundMessageHandlerInterface
 {
-    private ?AuthChallengeHandlerInterface $authHandler = null;
-    private ?AuthResultListenerInterface $authResultListener = null;
-
-    public function setAuthHandler(?AuthChallengeHandlerInterface $handler): void
+    public function __construct(private AuthMessageHandler $auth)
     {
-        $this->authHandler = $handler;
     }
 
-    public function setAuthResultListener(AuthResultListenerInterface $listener): void
+    #[Override]
+    public function handledMessageType(): string
     {
-        $this->authResultListener = $listener;
+        return OkMessage::class;
     }
 
-    public function handle(OkMessage $message, RelaySession $session): void
+    #[Override]
+    public function handle(RelayMessage $message, RelaySession $session): void
     {
-        $eventIdHex = $message->getEventId()->toHex();
-
-        if ($session->isPendingAuth($eventIdHex)) {
-            $this->acknowledgeAuth($message, $session);
-
-            return;
-        }
-
-        $future = $session->getPendingResponse($eventIdHex);
-
-        if (null === $future) {
-            return;
-        }
-
-        $session->removePendingResponse($eventIdHex);
-
-        $result = match (OkOutcome::classify($message)) {
-            OkOutcome::AuthRequired => null,
-            OkOutcome::Accepted => PublishResult::accepted($message->getMessage()),
-            OkOutcome::Rejected => PublishResult::rejected($message->getMessage()),
+        match (true) {
+            $message instanceof OkMessage => $this->handleOk($message, $session),
+            default => throw new InvalidArgumentException('OkMessageHandler cannot handle '.$message::class),
         };
-
-        if (null === $result) {
-            $this->parkOrReject($message, $session, $future);
-
-            return;
-        }
-
-        $session->removePendingEvent($eventIdHex);
-        $future->complete($result);
     }
 
-    private function acknowledgeAuth(OkMessage $message, RelaySession $session): void
-    {
-        $session->clearPendingAuth($message->getEventId()->toHex());
-
-        if ($message->isAccepted()) {
-            $this->flushAuthRetryQueue($session);
-        } else {
-            $this->failAuthRetryQueue($session, $message->getMessage());
-        }
-
-        $this->authResultListener?->onAuthResult(
-            $session->getConnection()->getRelayUrl(),
-            $message->isAccepted(),
-            $message->getMessage(),
-        );
-    }
-
-    /**
-     * @param DeferredFuture<PublishResult> $future
-     */
-    // Deliberate: with no handler the challenge can never be signed, so return the relay's rejection rather than park it forever - see ADR-0004
-    private function parkOrReject(OkMessage $message, RelaySession $session, DeferredFuture $future): void
+    private function handleOk(OkMessage $message, RelaySession $session): void
     {
         $eventIdHex = $message->getEventId()->toHex();
 
-        if (null === $this->authHandler) {
-            $session->removePendingEvent($eventIdHex);
-            $future->complete(PublishResult::rejected($message->getMessage()));
+        if ($session->isAuthAttempt($eventIdHex)) {
+            $this->auth->acknowledge($message, $session);
 
             return;
         }
 
-        $session->parkPublish(new ParkedPublish($eventIdHex, $future));
-    }
-
-    private function flushAuthRetryQueue(RelaySession $session): void
-    {
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $eventIdHex = $parked->getEventIdHex();
-            $event = $session->getPendingEvent($eventIdHex);
-
-            if (null === $event) {
-                $parked->getDeferred()->error(
-                    ConnectionException::forRelay($session->getConnection()->getRelayUrl(), 'Auth retry failed: event no longer available')
-                );
-                continue;
-            }
-
-            $session->setPendingResponse($eventIdHex, $parked->getDeferred());
-
-            try {
-                $session->send(new EventMessage($event));
-            } catch (Throwable $e) {
-                $session->removePendingResponse($eventIdHex);
-                $session->removePendingEvent($eventIdHex);
-
-                if (!$parked->getDeferred()->isComplete()) {
-                    $parked->getDeferred()->error(
-                        ConnectionException::forRelay($session->getConnection()->getRelayUrl(), 'Auth retry failed: '.$e->getMessage())
-                    );
-                }
-            }
+        if (null === $session->getPendingResponse($eventIdHex)) {
+            return;
         }
-    }
 
-    private function failAuthRetryQueue(RelaySession $session, string $reason): void
-    {
-        foreach ($session->takeAuthRetryQueue() as $parked) {
-            $session->removePendingEvent($parked->getEventIdHex());
-            $parked->getDeferred()->complete(PublishResult::rejected('auth-required, auth rejected: '.$reason));
+        $outcome = OkOutcome::classify($message);
+
+        if (OkOutcome::AuthRequired === $outcome && $this->auth->park($session, new ParkedPublish($eventIdHex))) {
+            // Deliberate: a parked publish is bounded by the auth timeout, not its own - see ADR-0014
+            $session->suspendPublishTimeout($eventIdHex);
+
+            return;
         }
+
+        $session->settlePublish($eventIdHex, OkOutcome::Accepted === $outcome
+            ? PublishResult::accepted($message->getMessage())
+            : PublishResult::rejected($message->getMessage()));
     }
 }

@@ -6,8 +6,7 @@ namespace Innis\Nostr\Client\Tests\Support;
 
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayUrl;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayChallenge;
 use Override;
 
 final readonly class FixedAuthChallengeHandler implements AuthChallengeHandlerInterface
@@ -17,7 +16,7 @@ final readonly class FixedAuthChallengeHandler implements AuthChallengeHandlerIn
     }
 
     #[Override]
-    public function handleAuthChallenge(RelayUrl $relayUrl, Challenge $challenge): ?Event
+    public function handleAuthChallenge(RelayChallenge $relayChallenge): ?Event
     {
         return $this->response;
     }

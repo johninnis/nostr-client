@@ -22,6 +22,8 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(500, $config->getReconnectInitialDelayMs());
         $this->assertSame(60000, $config->getReconnectMaxDelayMs());
         $this->assertSame(0, $config->getReconnectMaxAttempts());
+        $this->assertSame(60000, $config->getAuthTimeoutMs());
+        $this->assertSame(8000, $config->getPublishTimeoutMs());
     }
 
     public function testConstructorWithCustomValues(): void
@@ -35,6 +37,8 @@ final class ConnectionConfigTest extends TestCase
             reconnectMaxDelayMs: 5000,
             reconnectMaxAttempts: 5,
             heartbeatIntervalMs: 45000,
+            authTimeoutMs: 15000,
+            publishTimeoutMs: 2000,
         );
 
         $this->assertSame(30, $config->getConnectionTimeoutSeconds());
@@ -45,6 +49,8 @@ final class ConnectionConfigTest extends TestCase
         $this->assertSame(5000, $config->getReconnectMaxDelayMs());
         $this->assertSame(5, $config->getReconnectMaxAttempts());
         $this->assertSame(45000, $config->getHeartbeatIntervalMs());
+        $this->assertSame(15000, $config->getAuthTimeoutMs());
+        $this->assertSame(2000, $config->getPublishTimeoutMs());
     }
 
     /**
@@ -88,6 +94,22 @@ final class ConnectionConfigTest extends TestCase
             'negative reconnect max attempts' => [
                 ['reconnectMaxAttempts' => -1],
                 'Reconnect max attempts must be zero or positive',
+            ],
+            'zero auth timeout' => [
+                ['authTimeoutMs' => 0],
+                'Auth timeout must be positive',
+            ],
+            'negative auth timeout' => [
+                ['authTimeoutMs' => -1],
+                'Auth timeout must be positive',
+            ],
+            'zero publish timeout' => [
+                ['publishTimeoutMs' => 0],
+                'Publish timeout must be positive',
+            ],
+            'negative publish timeout' => [
+                ['publishTimeoutMs' => -1],
+                'Publish timeout must be positive',
             ],
         ];
     }
