@@ -23,4 +23,5 @@ The heartbeat runs as one background loop per connection, started in `connect()`
 
 - An idle read-only subscriber stays connected across a relay's idle timeout without reconnect churn, provided its interval is shorter than the relay's timeout. The default 30s clears the common values; a host on an unusually aggressive relay lowers it, and `0` turns it off entirely.
 - The heartbeat is best-effort and deliberately does not trigger reconnection on a failed send; that responsibility stays with the message-handler loop, so there is one place that fails a connection.
-- The throwaway id collides by design with the `CLOSE` the client sends in reply to an application `ping` NOTICE — both are keep-alives for a subscription that was never opened, and sharing the id keeps that intent in one place.
+- The throwaway id collides by design with the `CLOSE` the client sends in reply to an application `ping` NOTICE — both are keep-alives for a subscription that was never opened, and sharing the id keeps that intent in one place. The id is reserved, so a caller cannot open a subscription the heartbeat would close (ADR-0020).
+- Shared decision: nostr-adrs ADR-0036.

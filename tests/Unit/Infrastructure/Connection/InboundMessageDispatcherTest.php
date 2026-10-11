@@ -47,7 +47,7 @@ final class InboundMessageDispatcherTest extends TestCase
         return new InboundMessageDispatcher(new NullLogger(), new InboundMessageHandlers(
             new EventMessageHandler(),
             new OkMessageHandler($auth),
-            new EoseMessageHandler(),
+            new EoseMessageHandler($auth),
             new ClosedMessageHandler($auth),
             new NoticeMessageHandler(new NullLogger()),
             $auth,

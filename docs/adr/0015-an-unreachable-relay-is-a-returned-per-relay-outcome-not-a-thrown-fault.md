@@ -45,3 +45,4 @@ The connected check stays in the application service (ADR-0012). The transport a
 - A `try`/`catch` around a client call is never needed for a relay being down. Do not "restore" throwing for an unreachable relay, a drop or a timeout: it re-conflates a relay's absence with a broken client and loses the other relays' answers.
 - `ConnectionException` no longer escapes a client operation for a relay's behaviour; the soak harness and the connection fuzz test assert that nothing escapes at all.
 - `awaitPendingPublishes()` remains the batch drain for "wait until every in-flight publish for this relay has settled", parked publishes included; per-publish outcomes come from each returned future.
+- Shared decisions: nostr-adrs ADR-0001 and ADR-0030.

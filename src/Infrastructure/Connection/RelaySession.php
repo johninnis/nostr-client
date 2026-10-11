@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
+use Amp\ByteStream\StreamException;
 use Amp\CancelledException;
 use Amp\DeferredCancellation;
 use Amp\DeferredFuture;
@@ -16,7 +17,9 @@ use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\PublishResult;
 use Innis\Nostr\Core\Application\Port\EventHandlerInterface;
 use Innis\Nostr\Core\Domain\Entity\Event;
+use Innis\Nostr\Core\Domain\Enum\SubscriptionState;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Challenge;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\ReqMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\ClientMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 
@@ -46,6 +49,12 @@ final class RelaySession
 
     /** @var list<ParkedWorkInterface> */
     private array $parked = [];
+
+    /** @var array<string, SubscriptionId> */
+    private array $narrowed = [];
+
+    /** @var array<string, true> */
+    private array $widened = [];
 
     private ?WebsocketConnection $websocket;
 
@@ -219,8 +228,51 @@ final class RelaySession
         $handler = $this->getHandler($subscriptionId);
         $this->connection = $this->connection->withoutSubscription($subscriptionId);
         $this->removeHandler($subscriptionId);
+        $this->forgetNarrowing($subscriptionId);
 
         $handler?->handleClosed($subscriptionId, $reason);
+    }
+
+    public function reissueSubscription(SubscriptionId $subscriptionId): void
+    {
+        $subscription = $this->connection->getSubscriptions()->get($subscriptionId);
+
+        if (null === $subscription) {
+            return;
+        }
+
+        try {
+            $this->send(ReqMessage::from($subscriptionId, $subscription->getFilters()));
+            $this->connection = $this->connection->withSubscriptionState($subscriptionId, SubscriptionState::Active);
+        } catch (ConnectionException|StreamException) {
+            $this->closeSubscription($subscriptionId, RelayUnavailability::Disconnected->value);
+        }
+    }
+
+    public function narrow(SubscriptionId $subscriptionId): void
+    {
+        $key = (string) $subscriptionId;
+
+        if ($this->connection->hasSubscription($subscriptionId) && !isset($this->widened[$key])) {
+            $this->narrowed[$key] = $subscriptionId;
+        }
+    }
+
+    /**
+     * @return list<SubscriptionId>
+     */
+    public function takeNarrowed(): array
+    {
+        $this->widened += array_fill_keys(array_keys($this->narrowed), true);
+        $narrowed = array_values($this->narrowed);
+        $this->narrowed = [];
+
+        return $narrowed;
+    }
+
+    public function forgetNarrowing(SubscriptionId $subscriptionId): void
+    {
+        unset($this->narrowed[(string) $subscriptionId], $this->widened[(string) $subscriptionId]);
     }
 
     public function storeChallenge(Challenge $challenge): void

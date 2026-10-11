@@ -21,3 +21,4 @@ Sending the filter anyway would let a relay that skips an empty list stream its 
 - A caller learns at once that there is nothing stored for such a subscription, and nothing live will arrive.
 - A relay never sees a request for nothing from this client.
 - Do not send the filter to "let the relay decide", and do not report it as a closed or failed subscription: nothing went wrong.
+- Shared decision: nostr-adrs ADR-0069.

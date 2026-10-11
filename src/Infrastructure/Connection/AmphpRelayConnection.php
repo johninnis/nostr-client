@@ -19,6 +19,7 @@ use Innis\Nostr\Client\Domain\Collection\RelayConnectionCollection;
 use Innis\Nostr\Client\Domain\Entity\RelayConnection;
 use Innis\Nostr\Client\Domain\Enum\ConnectionState;
 use Innis\Nostr\Client\Domain\Enum\RelayUnavailability;
+use Innis\Nostr\Client\Domain\Enum\ReservedSubscriptionId;
 use Innis\Nostr\Client\Domain\Exception\ConnectionException;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectionConfig;
 use Innis\Nostr\Client\Domain\ValueObject\ConnectResult;
@@ -47,7 +48,6 @@ use function Amp\weakClosure;
 final class AmphpRelayConnection implements ConnectionHandlerInterface
 {
     private const int MAX_INBOUND_BACKLOG = 1024;
-    private const string HEARTBEAT_SUBSCRIPTION_ID = 'keepalive';
 
     // Deliberate: the optional reconnection listener is registered after construction, not constructor-injected - see ADR-0010
     private ?ReconnectionListenerInterface $reconnectionListener = null;
@@ -66,7 +66,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         $this->dispatcher = new InboundMessageDispatcher($this->logger, new InboundMessageHandlers(
             new EventMessageHandler(),
             new OkMessageHandler($this->authMessageHandler),
-            new EoseMessageHandler(),
+            new EoseMessageHandler($this->authMessageHandler),
             new ClosedMessageHandler($this->authMessageHandler),
             new NoticeMessageHandler($this->logger),
             $this->authMessageHandler,
@@ -180,6 +180,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         $session->setConnection($session->getConnection()->withSubscription($subscriptionId, $matchable));
+        $session->forgetNarrowing($subscriptionId);
 
         if (null !== $handler) {
             $session->setHandler($subscriptionId, $handler);
@@ -205,6 +206,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         try {
             $session->setConnection($session->getConnection()->withoutSubscription($subscriptionId));
             $session->removeHandler($subscriptionId);
+            $session->forgetNarrowing($subscriptionId);
 
             $session->send(new CloseMessage($subscriptionId));
         } catch (Throwable $e) {
@@ -391,11 +393,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
         }
 
         $intervalSeconds = $intervalMs / 1000.0;
-        $keepAlive = SubscriptionId::tryFromString(self::HEARTBEAT_SUBSCRIPTION_ID);
-
-        if (null === $keepAlive) {
-            return;
-        }
+        $keepAlive = new CloseMessage(ReservedSubscriptionId::KeepAlive->toSubscriptionId());
 
         $deferred = new DeferredCancellation();
         $this->registry->beginHeartbeat($relayUrl, $deferred);
@@ -420,7 +418,7 @@ final class AmphpRelayConnection implements ConnectionHandlerInterface
                 }
 
                 try {
-                    $session->send(new CloseMessage($keepAlive));
+                    $session->send($keepAlive);
                 } catch (Throwable $e) {
                     $this->logger->debug('Heartbeat send failed', [
                         'relay' => (string) $relayUrl,

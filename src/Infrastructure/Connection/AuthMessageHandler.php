@@ -12,6 +12,7 @@ use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\AuthMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\OkMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\RelayChallenge;
+use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use InvalidArgumentException;
 use Override;
 use Psr\Log\LoggerInterface;
@@ -85,6 +86,16 @@ final class AuthMessageHandler implements InboundMessageHandlerInterface
         return true;
     }
 
+    // Deliberate: a subscription the relay narrowed stays open, not parked, and is sent again once the connection authenticates - see ADR-0021
+    public function widenWhenAuthenticated(RelaySession $session, SubscriptionId $subscriptionId): void
+    {
+        $session->narrow($subscriptionId);
+
+        if (null !== $this->authHandler && $session->isAuthenticated()) {
+            $this->widenNarrowed($session);
+        }
+    }
+
     // Deliberate: an auth-required answer to our AUTH asks for the fresh challenge, not a final refusal - see ADR-0014
     public function acknowledge(OkMessage $message, RelaySession $session): void
     {
@@ -94,6 +105,7 @@ final class AuthMessageHandler implements InboundMessageHandlerInterface
         if ($message->isAccepted()) {
             $session->markAuthenticated();
             $this->resumeParked($session);
+            $this->widenNarrowed($session);
         } elseif ($message->isAuthRequired()) {
             $this->answerStoredChallenge($session);
         } else {
@@ -202,6 +214,13 @@ final class AuthMessageHandler implements InboundMessageHandlerInterface
     {
         foreach ($session->takeParked() as $work) {
             $work->refuse($session, $reason);
+        }
+    }
+
+    private function widenNarrowed(RelaySession $session): void
+    {
+        foreach ($session->takeNarrowed() as $subscriptionId) {
+            $session->reissueSubscription($subscriptionId);
         }
     }
 }

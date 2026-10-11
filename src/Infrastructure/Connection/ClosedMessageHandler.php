@@ -42,6 +42,7 @@ final readonly class ClosedMessageHandler implements InboundMessageHandlerInterf
 
         if (ReasonPrefix::AuthRequired === $message->getReasonPrefix()) {
             $session->setConnection($session->getConnection()->withSubscriptionState($subscriptionId, SubscriptionState::Pending));
+            $session->forgetNarrowing($subscriptionId);
 
             if ($this->auth->park($session, new ParkedSubscription($subscriptionId))) {
                 return;

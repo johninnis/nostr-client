@@ -14,7 +14,7 @@ A PHP client library for connecting to Nostr relays over WebSocket, subscribing 
 - **AMPHP async** - Non-blocking WebSocket I/O with fibers
 - **Subscription management** - Subscribe with single or multiple filters, receive events via handler callbacks
 - **Event publishing** - Publish signed events with OK response handling
-- **NIP-42 authentication** - Automatic auth challenge handling with transparent publish and subscription retry
+- **NIP-42 authentication** - Automatic auth challenge handling with transparent publish and subscription retry, and subscriptions a relay narrowed (NIP-67 `auth` hint) sent again once authenticated
 - **Connection lifecycle** - Automatic state tracking, health checks, reconnection, ping
 - **Keep-alive handling** - WebSocket heartbeats and application-level ping responses
 - **PSR-3 logging** - Standard logging interface throughout
@@ -145,6 +145,10 @@ $subscriptionId = $client->subscribe(
 );
 ```
 
+### Subscription Ids
+
+The client assigns a subscription id when the request names none. A request may name its own, except `keepalive`: the client sends `["CLOSE", "keepalive"]` as its keep-alive, so building a `SubscriptionRequest` with that id throws an `InvalidArgumentException`.
+
 ### Connection Configuration
 
 `connect()` accepts an optional `ConnectionConfig`. It controls the connection timeout, request headers, user agent, and auto-reconnect behaviour. It is immutable; construct it with named arguments, defaulting anything you do not set.
@@ -226,6 +230,8 @@ $client->awaitPendingPublishes($relay, timeoutSeconds: 5.0);
 
 Register an auth handler to sign relay challenges. When a publish is refused with `OK false` or a subscription with `CLOSED`, prefixed `auth-required:`, the client answers the relay's challenge and parks the work. Once the relay accepts the `AUTH` with `OK true`, the event is resent and the `REQ` re-issued on the same subscription id, so neither the publish's future nor the subscription's handler sees the refusal. If the relay rejects the `AUTH`, the handler declines by returning `null`, or no verdict arrives within `ConnectionConfig`'s `authTimeoutMs` (default 60000), the parked publish resolves as rejected and the parked subscription is closed, with a reason beginning `auth-required:`. Without a registered handler the relay's refusal is returned as is.
 
+A relay may instead serve only what a guest may read and end the stored events with NIP-67's `"auth"` hint (`["EOSE", <id>, ["auth"]]`). That subscription stays open and is not parked. Once the relay accepts the client's `AUTH`, or at once if it already has, the client sends its `REQ` again on the same id, once, so the relay serves it at the authenticated scope. The handler then receives a second `handleEose`, and may receive events it already had. A repeated `EOSE` for one `REQ` is ignored.
+
 ```php
 use Innis\Nostr\Client\Application\Port\AuthChallengeHandlerInterface;
 use Innis\Nostr\Core\Domain\Factory\RumourFactory;
@@ -304,6 +310,7 @@ src/
     Entity/RelayConnection               Connection state and subscriptions
     Enum/ConnectionState                 State machine (disconnected/connected/disconnecting/failed)
     Enum/RelayUnavailability             The client's own outcomes for a relay that cannot answer
+    Enum/ReservedSubscriptionId          Subscription ids the client keeps for itself (keepalive)
     ValueObject/ConnectionConfig         Connection configuration
     ValueObject/ConnectResult            Outcome of connecting to one relay
     ValueObject/HealthCheckResult        Health check outcome

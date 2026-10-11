@@ -18,6 +18,9 @@ final class RecordingEventHandler implements EventHandlerInterface
     /** @var list<string> */
     public array $closedReasons = [];
 
+    /** @var list<string> */
+    public array $eoseSubscriptionIds = [];
+
     #[Override]
     public function handleEvent(Event $event, SubscriptionId $subscriptionId): void
     {
@@ -27,6 +30,7 @@ final class RecordingEventHandler implements EventHandlerInterface
     #[Override]
     public function handleEose(SubscriptionId $subscriptionId): void
     {
+        $this->eoseSubscriptionIds[] = (string) $subscriptionId;
     }
 
     #[Override]

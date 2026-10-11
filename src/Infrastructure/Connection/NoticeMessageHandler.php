@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Innis\Nostr\Client\Infrastructure\Connection;
 
+use Innis\Nostr\Client\Domain\Enum\ReservedSubscriptionId;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Client\CloseMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\Relay\NoticeMessage;
 use Innis\Nostr\Core\Domain\ValueObject\Protocol\Message\RelayMessage;
-use Innis\Nostr\Core\Domain\ValueObject\Protocol\SubscriptionId;
 use InvalidArgumentException;
 use Override;
 use Psr\Log\LoggerInterface;
@@ -16,7 +16,6 @@ use Throwable;
 final readonly class NoticeMessageHandler implements InboundMessageHandlerInterface
 {
     private const string APPLICATION_PING_NOTICE = 'ping';
-    private const string KEEP_ALIVE_SUBSCRIPTION_ID = 'keepalive';
 
     public function __construct(private LoggerInterface $logger)
     {
@@ -47,6 +46,7 @@ final readonly class NoticeMessageHandler implements InboundMessageHandlerInterf
             'notice' => $notice,
         ]);
 
+        // Deliberate: trim() strips only ASCII whitespace and NUL, never Unicode whitespace, so every client swallows the same bodies - see ADR-0003
         if (self::APPLICATION_PING_NOTICE === strtolower(trim($notice))) {
             $this->respondToApplicationPing($session);
 
@@ -68,14 +68,8 @@ final readonly class NoticeMessageHandler implements InboundMessageHandlerInterf
     // Deliberate: keep-alive reply via CLOSE for a throwaway subscription - see ADR-0003
     private function respondToApplicationPing(RelaySession $session): void
     {
-        $keepAliveSubscriptionId = SubscriptionId::tryFromString(self::KEEP_ALIVE_SUBSCRIPTION_ID);
-
-        if (null === $keepAliveSubscriptionId) {
-            return;
-        }
-
         try {
-            $session->send(new CloseMessage($keepAliveSubscriptionId));
+            $session->send(new CloseMessage(ReservedSubscriptionId::KeepAlive->toSubscriptionId()));
 
             $this->logger->debug('Responded to application-level ping', [
                 'relay' => (string) $session->getConnection()->getRelayUrl(),

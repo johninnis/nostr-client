@@ -15,7 +15,7 @@ Handling that NOTICE reads like a smell on two counts, and a later reader is tem
 
 ## Decision
 
-When a relay NOTICE body is exactly `ping` (case-insensitive, trimmed), reply with a `CLOSE` for a fixed throwaway subscription id and do **not** forward that NOTICE to the application handlers.
+When a relay NOTICE body is exactly `ping`, compared case-insensitively after removing leading and trailing ASCII whitespace and NUL (space, tab, line feed, carriage return, vertical tab, NUL) and nothing else, reply with a `CLOSE` for a fixed throwaway subscription id, `keepalive`, and do **not** forward that NOTICE to the application handlers. The id is reserved, so no subscription of the client's can carry it (ADR-0020).
 
 - A `CLOSE` is the cheapest well-formed client frame: it is a fixed two-element array, needs no signing and no event, and a relay ignores a `CLOSE` for an unknown subscription. Any frame proves liveness; `CLOSE` is the smallest one that is unambiguously valid and side-effect-free.
 - The `ping` NOTICE is a transport keep-alive, not application content, so forwarding it to `handleNotice` would surface protocol plumbing the consumer cannot act on.
@@ -25,3 +25,5 @@ When a relay NOTICE body is exactly `ping` (case-insensitive, trimmed), reply wi
 - Connections to relays that use NOTICE-based liveness checks stay open without any application code.
 - The `CLOSE`-for-an-unopened-subscription is intentional. It is pinned by a Chesterton's-fence comment at the call site pointing here; do not "fix" it into a real subscription teardown or a NOTICE reply.
 - A genuine relay NOTICE whose body happens to be the word `ping` is consumed rather than delivered to handlers. This collision is accepted: a bare `ping` carries no application meaning, and liveness is the only sensible interpretation.
+- Do not trim Unicode whitespace (`mb_trim()`, a `\s` with the `u` modifier): a body such as `ping` followed by a no-break space is passed on, so that every client swallows exactly the same bodies (nostr-adrs ADR-0035).
+- Shared decision: nostr-adrs ADR-0035.
