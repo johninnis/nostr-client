@@ -22,7 +22,7 @@
         "ext-ffi": "*",
         "friendsofphp/php-cs-fixer": "^3.95",
         "innis/coding-standards": "^0.2",
-        "innis/nostr-relay": "^0.12",
+        "innis/nostr-relay": "^0.13",
         "phpstan/phpstan": "~2.3.1",
         "phpstan/phpstan-phpunit": "^2.0",
         "phpunit/phpunit": "^13.1",
