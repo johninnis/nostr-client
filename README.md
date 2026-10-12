@@ -359,6 +359,9 @@ composer rector
 
 # Check Rector transformations without modifying files
 composer check-rector
+
+# Check that no tracked path component is over 95 characters
+composer check-path-lengths
 ```
 
 ---
